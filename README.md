@@ -82,6 +82,15 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+## 开发测试
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install pytest
+pytest -q
+```
+
 ## 使用方法
 
 直接运行模块：

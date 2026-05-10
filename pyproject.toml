@@ -22,4 +22,5 @@ netwatch = "netwatch.cli:main"
 include = ["netwatch*"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 pythonpath = ["."]
