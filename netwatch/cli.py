@@ -1,0 +1,153 @@
+"""Interactive command-line interface for netwatch-cli."""
+
+from __future__ import annotations
+
+from rich.console import Console
+from rich.live import Live
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.table import Table
+
+from netwatch.network_info import get_network_interfaces, get_primary_ipv4
+from netwatch.scanner import infer_local_network, scan_network
+from netwatch.speed import format_speed, sample_network_speed
+from netwatch.speedtest_runner import (
+    SpeedtestRunError,
+    SpeedtestUnavailableError,
+    run_speedtest,
+)
+
+console = Console()
+
+
+def build_menu() -> Panel:
+    """Build the main menu panel."""
+    menu = "\n".join(
+        [
+            "[bold cyan]1[/bold cyan]. 查看实时网卡流量",
+            "[bold cyan]2[/bold cyan]. 查看本机网络信息",
+            "[bold cyan]3[/bold cyan]. 扫描局域网在线设备",
+            "[bold cyan]4[/bold cyan]. 运行 Speedtest 测速",
+            "[bold cyan]5[/bold cyan]. 退出",
+        ]
+    )
+    return Panel(menu, title="netwatch-cli", subtitle="轻量级网络状态工具", border_style="cyan")
+
+
+def show_realtime_traffic() -> None:
+    """Refresh current network throughput once per second until Ctrl+C."""
+    console.print("[yellow]这是当前网卡实时吞吐量，不代表最大带宽。[/yellow]")
+    console.print("[dim]按 Ctrl+C 返回菜单[/dim]")
+    table = Table(title="实时网卡流量")
+    table.add_column("Metric", style="bold")
+    table.add_column("Speed", justify="right")
+
+    try:
+        with Live(table, console=console, refresh_per_second=4, screen=False) as live:
+            while True:
+                speed = sample_network_speed(interval=1.0)
+                updated = Table(title="实时网卡流量")
+                updated.add_column("Metric", style="bold")
+                updated.add_column("Speed", justify="right")
+                updated.add_row("Upload speed", format_speed(speed.upload_bps))
+                updated.add_row("Download speed", format_speed(speed.download_bps))
+                live.update(updated)
+    except KeyboardInterrupt:
+        console.print("\n[green]已返回菜单[/green]")
+
+
+def show_network_info() -> None:
+    """Display local network interface information."""
+    interfaces = get_network_interfaces()
+    table = Table(title="本机网络信息")
+    table.add_column("网卡名称", style="bold cyan")
+    table.add_column("IPv4 地址")
+    table.add_column("MAC 地址")
+
+    for interface in interfaces:
+        table.add_row(interface.name, interface.ipv4 or "-", interface.mac or "-")
+
+    if not interfaces:
+        console.print("[yellow]未找到可显示的网络接口。[/yellow]")
+        return
+
+    console.print(table)
+
+
+def show_lan_scan() -> None:
+    """Scan the inferred /24 local network and show online hosts."""
+    local_ip = get_primary_ipv4()
+    network = infer_local_network(local_ip)
+    if network is None:
+        console.print("[red]无法推测本机局域网网段。[/red]")
+        return
+
+    console.print(f"[dim]本机 IP: {local_ip}，扫描网段: {network}[/dim]")
+    with console.status("[bold green]正在 ping 扫描局域网在线设备...[/bold green]"):
+        results = scan_network(network)
+
+    table = Table(title=f"在线设备 ({network})")
+    table.add_column("IP", style="bold cyan")
+    table.add_column("状态")
+    table.add_column("主机名")
+
+    for result in results:
+        table.add_row(result.ip, "online", result.hostname or "-")
+
+    if results:
+        console.print(table)
+    else:
+        console.print("[yellow]未发现在线主机，或当前环境禁用了 ping 响应。[/yellow]")
+
+
+def show_speedtest() -> None:
+    """Run an internet bandwidth test using speedtest-cli."""
+    console.print("[dim]Speedtest 测速会连接公网测速服务器，可能需要几十秒。[/dim]")
+    try:
+        with console.status("[bold green]正在运行 Speedtest 测速...[/bold green]"):
+            result = run_speedtest()
+    except SpeedtestUnavailableError:
+        console.print("[yellow]未安装 speedtest-cli，请先执行：[/yellow]")
+        console.print("[bold]pip install speedtest-cli[/bold]")
+        return
+    except SpeedtestRunError as exc:
+        console.print(f"[red]Speedtest 测速失败：{exc}[/red]")
+        return
+    except KeyboardInterrupt:
+        console.print("\n[green]已取消 Speedtest 测速。[/green]")
+        return
+
+    table = Table(title="Speedtest 测速结果")
+    table.add_column("Metric", style="bold cyan")
+    table.add_column("Value", justify="right")
+    table.add_row("Ping", f"{result.ping_ms:.2f} ms")
+    table.add_row("Download", f"{result.download_mbps:.2f} Mbps")
+    table.add_row("Upload", f"{result.upload_mbps:.2f} Mbps")
+    table.add_row("Server", f"{result.server_sponsor} ({result.server_name})")
+    console.print(table)
+
+
+def main() -> None:
+    """Run the interactive menu."""
+    try:
+        while True:
+            console.print(build_menu())
+            choice = Prompt.ask("请选择功能", choices=["1", "2", "3", "4", "5"], default="1")
+
+            if choice == "1":
+                show_realtime_traffic()
+            elif choice == "2":
+                show_network_info()
+            elif choice == "3":
+                show_lan_scan()
+            elif choice == "4":
+                show_speedtest()
+            elif choice == "5":
+                console.print("[green]再见。[/green]")
+                break
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[green]已退出 netwatch-cli。[/green]")
+
+
+if __name__ == "__main__":
+    main()
