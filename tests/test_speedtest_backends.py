@@ -428,3 +428,183 @@ def test_quality_details_packet_loss_triggers_wifi_check() -> None:
     assert any("packet loss > 1%" == d["condition"] for d in details)
     loss_detail = next(d for d in details if d["condition"] == "packet loss > 1%")
     assert any("Wi-Fi" in line for line in loss_detail["advice"])
+
+
+# --- Integration tests: print_speedtest_result call chain ---
+
+
+def test_print_speedtest_result_cmhk_hong_kong_no_crash() -> None:
+    """print_speedtest_result must not crash with a real-world CMHK Hong Kong result."""
+    import io
+    from netwatch.cli import print_speedtest_result, Console
+
+    result = SpeedtestResult(
+        backend="official-ookla-cli",
+        ping_ms=210.0,
+        jitter_ms=352.0,
+        packet_loss=21.67,
+        download_mbps=1.81,
+        download_MBps=0.23,
+        upload_mbps=2.90,
+        upload_MBps=0.36,
+        server_name="CMHK Broadband",
+        server_location="Hong Kong",
+        raw={
+            "interface": {
+                "name": "en0",
+                "internalIp": "192.168.31.75",
+                "externalIp": "223.73.123.72",
+            }
+        },
+    )
+
+    # Redirect console output to a string buffer
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+
+    # Temporarily replace the module-level console
+    import netwatch.cli as cli_mod
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        print_speedtest_result(result)
+    finally:
+        cli_mod.console = original_console
+
+    output = buf.getvalue()
+    # Must not be empty
+    assert output, "print_speedtest_result produced no output"
+    # Must contain the result table
+    assert "CMHK Broadband" in output, f"Missing server name in output: {output[:500]}"
+    # Must contain quality warning header
+    assert "不代表真实最大带宽" in output, f"Missing quality warning: {output[:500]}"
+    # Must contain specific advice for high ping
+    assert "距离过远" in output or "ping > 80ms" in output, f"Missing high ping advice: {output[:500]}"
+    # Must contain specific advice for high jitter
+    assert "jitter > 30ms" in output, f"Missing jitter warning: {output[:500]}"
+    # Must contain specific advice for packet loss
+    assert "packet loss > 1%" in output, f"Missing packet loss warning: {output[:500]}"
+    # Must contain specific advice for low download
+    assert "download < 50 Mbps" in output, f"Missing low download warning: {output[:500]}"
+
+
+def test_print_speedtest_result_tun_scenario_no_crash() -> None:
+    """print_speedtest_result must not crash and must warn about TUN/VPN."""
+    import io
+    from netwatch.cli import print_speedtest_result, Console
+
+    result = SpeedtestResult(
+        backend="official-ookla-cli",
+        ping_ms=50.0,
+        download_mbps=100.0,
+        download_MBps=12.5,
+        raw={
+            "interface": {
+                "name": "utun8",
+                "internalIp": "198.18.0.1",
+            }
+        },
+    )
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+
+    import netwatch.cli as cli_mod
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        print_speedtest_result(result)
+    finally:
+        cli_mod.console = original_console
+
+    output = buf.getvalue()
+    assert output, "print_speedtest_result produced no output"
+    assert "TUN/VPN" in output, f"Missing TUN/VPN warning: {output[:500]}"
+    assert "物理网卡" in output, f"Missing physical interface advice: {output[:500]}"
+
+
+def test_show_auto_speedtest_smoke_no_crash(monkeypatch) -> None:
+    """show_auto_speedtest must not crash when run_best_speedtest returns a real result."""
+    import io
+    from netwatch.cli import show_auto_speedtest, Console
+    from netwatch import config
+
+    test_result = SpeedtestResult(
+        backend="official-ookla-cli",
+        ping_ms=210.0,
+        jitter_ms=352.0,
+        packet_loss=21.67,
+        download_mbps=1.81,
+        download_MBps=0.23,
+        upload_mbps=2.90,
+        upload_MBps=0.36,
+        server_name="CMHK Broadband",
+        server_location="Hong Kong",
+        raw={
+            "interface": {
+                "name": "en0",
+                "internalIp": "192.168.31.75",
+            }
+        },
+    )
+
+    # Mock: no preferred server config
+    monkeypatch.setattr(config, "get_preferred_speedtest", lambda: None)
+    # Mock: run_best_speedtest returns our test result
+    monkeypatch.setattr("netwatch.cli.run_best_speedtest", lambda use_interface=True: test_result)
+    # Mock: get_preferred_physical_interface returns en0
+    monkeypatch.setattr(
+        "netwatch.cli.get_preferred_physical_interface",
+        lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"},
+    )
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+
+    import netwatch.cli as cli_mod
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        show_auto_speedtest()
+    finally:
+        cli_mod.console = original_console
+
+    output = buf.getvalue()
+    assert output, "show_auto_speedtest produced no output"
+    assert "不代表真实最大带宽" in output, f"Missing quality warning: {output[:500]}"
+    assert "CMHK Broadband" in output, f"Missing server name: {output[:500]}"
+
+
+# --- speedtest.cn web reference test ---
+
+
+def test_show_open_speedtest_cn_calls_webbrowser(monkeypatch) -> None:
+    """show_open_speedtest_cn must call webbrowser.open and not enter manual flow."""
+    import io
+    from netwatch.cli import show_open_speedtest_cn, Console
+
+    called_urls = []
+
+    class FakeBrowser:
+        @staticmethod
+        def open(url):
+            called_urls.append(url)
+
+    monkeypatch.setattr("webbrowser.open", FakeBrowser.open)
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+
+    import netwatch.cli as cli_mod
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        show_open_speedtest_cn()
+    finally:
+        cli_mod.console = original_console
+
+    output = buf.getvalue()
+    assert called_urls == ["https://www.speedtest.cn/"], f"Unexpected URLs: {called_urls}"
+    assert "speedtest.cn" in output, f"Missing speedtest.cn in output: {output[:300]}"
+    assert "不调用或逆向" in output, f"Missing privacy note: {output[:300]}"
+    assert "不会自动回传" in output, f"Missing no-auto-feedback note: {output[:300]}"

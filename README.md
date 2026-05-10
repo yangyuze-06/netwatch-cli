@@ -10,7 +10,7 @@
 - 运行带宽测速：主动连接公网测速服务器，默认优先使用真实物理网卡，显示 ping、download Mbps/MB/s 和 upload Mbps/MB/s。
 - 代理/当前出口测速：显示 CLI 当前公网出口，再使用最佳可用测速后端测速，不强制指定物理网卡。
 - 打开路由器管理后台：自动识别默认网关，并提供常见品牌后台入口。
-- 高级功能：列出 Speedtest 服务器、手动指定 server id 测速、按关键词筛选服务器、按运营商/城市预设优选服务器、打开 `speedtest.cn` 网页对照、显示测速后端信息和 Ookla selection details。
+- 高级功能：指定 Ookla server id 测速、按关键词筛选服务器、按运营商/城市预设优选服务器、保存常用服务器、查看测速后端信息、Ookla selection details，以及打开 `speedtest.cn` 网页对照。
 - 使用 `rich` 美化命令行输出。
 
 ## 实时网卡流量 vs Speedtest 最大带宽
@@ -64,7 +64,8 @@ V0.8.3 起，`netwatch-cli` 支持把最近一次成功测速的 Ookla server id
 - `official-ookla-cli` 作为默认通用后端。
 - 保存本地实测最快、最稳定的 Ookla server id。
 - 把 `speedtest.cn` 网页作为对照基准。
-- 本项目暂不逆向 `speedtest.cn` 私有网页 API；未来如果有正式 SDK/API 授权，会作为独立后端接入。
+- 高级功能支持“打开 speedtest.cn 网页对照测速”，通过浏览器打开对照页面。netwatch-cli 不会自动读取 speedtest.cn 网页结果、不逆向私有 API、不支持手动回填。
+- 本项目暂不逆向 `speedtest.cn` 私有网页 API；未来如果有正式 SDK/API 授权，会作为独立后端接入。自动浏览器读取（如 Playwright）可作为未来实验方向，但当前版本不实现。
 
 ## 代理/当前出口测速
 

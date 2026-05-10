@@ -73,7 +73,7 @@
 - P0：完善测速结果质量诊断。
 - P1：保存和复用常用 Ookla server id。
 - P1：增强高级功能里的“指定 server id 测速并保存”。
-- P1：完善 `speedtest.cn` 网页对照入口。
+- P1：完善 `speedtest.cn` 网页对照入口（仅浏览器打开，不自动读取结果、不逆向 API、不支持手动回填）。
 - P2：加入 LibreSpeed 自定义 server list。
 - P2：设备发现结果导出 JSON/CSV。
 - P3：更多路由器品牌适配。
@@ -127,7 +127,7 @@ git push
 - 每次修改后运行 compileall 和 pytest。
 - 网络真实测速不要写入单元测试，测试必须 mock。
 - 涉及公网 IP、stok、路由器 token 的内容不要落盘。
-- 对 `speedtest.cn` 不做私有接口逆向，只做网页打开或未来正式 SDK/API 后端。
+- 对 `speedtest.cn` 不做私有接口逆向，只做网页打开对照。netwatch-cli 不会自动读取 speedtest.cn 网页结果。未来如果有 speedtest.cn 官方 SDK/API 授权，可以作为独立后端接入。
 - 如果用户要求“跑满千兆”，要解释测速服务器选择和后端差异，而不是承诺 CLI 一定复现网页测速。
 
 ## 10. 最近一次重要终端现象

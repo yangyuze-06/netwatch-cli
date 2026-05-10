@@ -37,10 +37,12 @@ from netwatch.speed import format_speed, sample_network_speed
 from netwatch.proxy_probe import probe_exit_ip
 from netwatch.speedtest_runner import (
     SpeedtestResult,
+    build_isp_preset_keywords,
     filter_servers_by_keyword,
     get_available_backends,
     get_last_successful_speedtest_result,
     get_selection_details,
+    get_speedtest_quality_details,
     get_speedtest_quality_warnings,
     list_speedtest_servers,
     run_best_speedtest,
@@ -255,59 +257,6 @@ def show_auto_speedtest() -> None:
         console.print("[yellow]未识别到真实物理网卡，将使用当前 CLI 默认出口测速。[/yellow]")
     result = run_best_speedtest(use_interface=True)
     print_speedtest_result(result)
-
-
-def show_manual_speedtest() -> None:
-    """List nearby servers and run a speedtest against a chosen server."""
-    servers = show_speedtest_servers()
-    if not servers:
-        return
-
-    server_ids = [str(server.get("id")) for server in servers if server.get("id")]
-    if not server_ids:
-        console.print("[yellow]服务器列表没有可用 server id。[/yellow]")
-        return
-    server_id = Prompt.ask("请输入 server id", choices=server_ids)
-    run_speedtest_with_server_id(server_id)
-
-
-def show_speedtest_servers():
-    """List nearby Speedtest servers."""
-    console.print("[dim]正在获取附近 Speedtest 服务器...[/dim]")
-    servers = list_speedtest_servers()
-
-    if not servers:
-        console.print("[yellow]未找到附近测速服务器。[/yellow]")
-        return []
-    if servers and servers[0].get("error"):
-        console.print("[yellow]当前后端无法获取服务器列表。建议使用“带宽测速”自动模式，或安装官方 Ookla CLI。[/yellow]")
-        console.print(f"[dim]{servers[0]['error']}[/dim]")
-        return []
-
-    table = Table(title="附近测速服务器")
-    table.add_column("Server ID", style="bold cyan")
-    table.add_column("Sponsor")
-    table.add_column("Name")
-    table.add_column("Country")
-    table.add_column("Distance", justify="right")
-
-    server_ids = [str(server.get("id", "-")) for server in servers if server.get("id")]
-    for server in servers:
-        distance_value = server.get("distance") or server.get("d")
-        try:
-            distance = f"{float(distance_value):.2f} km" if distance_value is not None else "-"
-        except (TypeError, ValueError):
-            distance = "-"
-        table.add_row(
-            str(server.get("id", "-")),
-            str(server.get("sponsor", "-")),
-            str(server.get("name", "-")),
-            str(server.get("country", server.get("location", "-"))),
-            distance,
-        )
-
-    console.print(table)
-    return servers
 
 
 def show_speedtest_by_server_id() -> None:
@@ -612,11 +561,12 @@ def show_last_speedtest_raw_summary() -> None:
 def show_open_speedtest_cn() -> None:
     """Open speedtest.cn as a browser reference test."""
     url = "https://www.speedtest.cn/"
-    console.print(f"[green]正在打开浏览器测速对照：{url}[/green]")
-    console.print("[dim]这是网页对照入口，不调用或逆向 speedtest.cn 私有 API。[/dim]")
     import webbrowser
 
     webbrowser.open(url)
+    console.print(f"[green]已打开 speedtest.cn 网页。[/green]")
+    console.print("[dim]这是浏览器对照测速，不会自动回传结果到终端。[/dim]")
+    console.print("[dim]本项目不调用或逆向 speedtest.cn 私有 API。[/dim]")
 
 
 def show_open_router_admin() -> None:
@@ -772,18 +722,17 @@ def build_advanced_menu() -> Panel:
     """Build advanced feature menu."""
     menu = "\n".join(
         [
-            "[bold cyan]1[/bold cyan]. 列出 Speedtest 服务器",
-            "[bold cyan]2[/bold cyan]. 手动指定 Speedtest server id 测速",
-            "[bold cyan]3[/bold cyan]. 按关键词筛选服务器测速",
-            "[bold cyan]4[/bold cyan]. 按当前运营商/城市优选服务器",
-            "[bold cyan]5[/bold cyan]. 保存最近一次成功测速服务器为默认",
-            "[bold cyan]6[/bold cyan]. 清除默认测速服务器",
-            "[bold cyan]7[/bold cyan]. 查看当前测速配置",
-            "[bold cyan]8[/bold cyan]. 显示最近一次测速 raw 摘要",
-            "[bold cyan]9[/bold cyan]. 打开 speedtest.cn 网页对照测速",
-            "[bold cyan]10[/bold cyan]. 显示测速后端信息",
-            "[bold cyan]11[/bold cyan]. 显示 Ookla server selection details",
-            "[bold cyan]12[/bold cyan]. 返回主菜单",
+            "[bold cyan]1[/bold cyan]. 指定 Ookla server id 测速",
+            "[bold cyan]2[/bold cyan]. 按关键词筛选 Ookla 服务器测速",
+            "[bold cyan]3[/bold cyan]. 按当前运营商/城市优选服务器",
+            "[bold cyan]4[/bold cyan]. 保存最近一次成功测速服务器为默认",
+            "[bold cyan]5[/bold cyan]. 清除默认测速服务器",
+            "[bold cyan]6[/bold cyan]. 查看当前测速配置",
+            "[bold cyan]7[/bold cyan]. 显示最近一次测速摘要",
+            "[bold cyan]8[/bold cyan]. 显示测速后端信息",
+            "[bold cyan]9[/bold cyan]. 显示 Ookla server selection details",
+            "[bold cyan]10[/bold cyan]. 打开 speedtest.cn 网页对照测速",
+            "[bold cyan]11[/bold cyan]. 返回主菜单",
         ]
     )
     return Panel(menu, title="高级功能", border_style="cyan")
@@ -795,32 +744,30 @@ def show_advanced_menu() -> None:
         console.print(build_advanced_menu())
         choice = Prompt.ask(
             "请选择高级功能",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
-            default="12",
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"],
+            default="11",
         )
         if choice == "1":
-            show_speedtest_servers()
-        elif choice == "2":
             show_speedtest_by_server_id()
-        elif choice == "3":
+        elif choice == "2":
             show_keyword_speedtest()
-        elif choice == "4":
+        elif choice == "3":
             show_isp_city_preset_speedtest()
-        elif choice == "5":
+        elif choice == "4":
             show_save_last_speedtest_server()
-        elif choice == "6":
+        elif choice == "5":
             show_clear_preferred_speedtest()
-        elif choice == "7":
+        elif choice == "6":
             show_speedtest_config()
-        elif choice == "8":
+        elif choice == "7":
             show_last_speedtest_raw_summary()
-        elif choice == "9":
-            show_open_speedtest_cn()
-        elif choice == "10":
+        elif choice == "8":
             show_speedtest_backend_info()
-        elif choice == "11":
+        elif choice == "9":
             show_ookla_selection_details()
-        elif choice == "12":
+        elif choice == "10":
+            show_open_speedtest_cn()
+        elif choice == "11":
             break
 
 

@@ -309,3 +309,4 @@ def show_backend_info() -> dict:
 def get_selection_details() -> str | dict | None:
     """Return Ookla server selection details when available."""
     return ookla_cli.get_selection_details()
+
