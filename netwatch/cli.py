@@ -16,8 +16,10 @@ from netwatch.network_info import (
 from netwatch.scanner import scan_network
 from netwatch.speed import format_speed, sample_network_speed
 from netwatch.speedtest_runner import (
+    SpeedtestResult,
     SpeedtestRunError,
     SpeedtestUnavailableError,
+    list_nearby_servers,
     run_speedtest,
 )
 
@@ -31,8 +33,9 @@ def build_menu() -> Panel:
             "[bold cyan]1[/bold cyan]. 查看实时网卡流量",
             "[bold cyan]2[/bold cyan]. 查看本机网络信息",
             "[bold cyan]3[/bold cyan]. 扫描局域网在线设备",
-            "[bold cyan]4[/bold cyan]. 运行 Speedtest 测速",
-            "[bold cyan]5[/bold cyan]. 退出",
+            "[bold cyan]4[/bold cyan]. 运行 Speedtest 自动测速",
+            "[bold cyan]5[/bold cyan]. 选择服务器测速",
+            "[bold cyan]6[/bold cyan]. 退出",
         ]
     )
     return Panel(menu, title="netwatch-cli", subtitle="轻量级网络状态工具", border_style="cyan")
@@ -98,11 +101,12 @@ def show_lan_scan() -> None:
 
     table = Table(title=f"在线设备 ({network})")
     table.add_column("IP", style="bold cyan")
-    table.add_column("状态")
-    table.add_column("主机名")
+    table.add_column("MAC")
+    table.add_column("Hostname")
+    table.add_column("Status")
 
     for result in results:
-        table.add_row(result.ip, "online", result.hostname or "-")
+        table.add_row(result.ip, result.mac or "-", result.hostname or "-", "online")
 
     if results:
         console.print(table)
@@ -137,11 +141,63 @@ def choose_lan_scan_candidate() -> NetworkCandidate | None:
     return candidates[choice - 1]
 
 
-def show_speedtest() -> None:
-    """Run an internet bandwidth test using speedtest-cli."""
+def show_auto_speedtest() -> None:
+    """Run an automatic internet bandwidth test using speedtest-cli."""
     console.print("[dim]Speedtest 测速会连接公网测速服务器，可能需要几十秒。[/dim]")
     try:
         result = run_speedtest(lambda message: console.print(f"[cyan]{message}[/cyan]"))
+    except SpeedtestUnavailableError:
+        console.print("[yellow]未安装 speedtest-cli，请先执行：[/yellow]")
+        console.print("[bold]pip install speedtest-cli[/bold]")
+        return
+    except SpeedtestRunError as exc:
+        console.print(f"[red]Speedtest 测速失败：{exc}[/red]")
+        console.print("[yellow]自动测速波动较大，建议尝试“选择服务器测速”。[/yellow]")
+        return
+    except KeyboardInterrupt:
+        console.print("\n[green]已取消 Speedtest 测速。[/green]")
+        return
+
+    print_speedtest_result(result)
+
+
+def show_manual_speedtest() -> None:
+    """List nearby servers and run a speedtest against a chosen server."""
+    console.print("[dim]正在获取附近 Speedtest 服务器...[/dim]")
+    try:
+        servers = list_nearby_servers(limit=10)
+    except SpeedtestUnavailableError:
+        console.print("[yellow]未安装 speedtest-cli，请先执行：[/yellow]")
+        console.print("[bold]pip install speedtest-cli[/bold]")
+        return
+    except SpeedtestRunError as exc:
+        console.print(f"[red]获取测速服务器失败：{exc}[/red]")
+        return
+    except KeyboardInterrupt:
+        console.print("\n[green]已取消 Speedtest 测速。[/green]")
+        return
+
+    if not servers:
+        console.print("[yellow]未找到附近测速服务器。[/yellow]")
+        return
+
+    table = Table(title="附近测速服务器")
+    table.add_column("Server ID", style="bold cyan")
+    table.add_column("Sponsor")
+    table.add_column("Name")
+    table.add_column("Country")
+    table.add_column("Distance", justify="right")
+
+    server_ids = [server.id for server in servers]
+    for server in servers:
+        distance = f"{server.distance_km:.2f} km" if server.distance_km is not None else "-"
+        table.add_row(server.id, server.sponsor, server.name, server.country, distance)
+
+    console.print(table)
+    server_id = Prompt.ask("请输入 server id", choices=server_ids)
+
+    try:
+        result = run_speedtest(lambda message: console.print(f"[cyan]{message}[/cyan]"), server_id=server_id)
     except SpeedtestUnavailableError:
         console.print("[yellow]未安装 speedtest-cli，请先执行：[/yellow]")
         console.print("[bold]pip install speedtest-cli[/bold]")
@@ -153,14 +209,27 @@ def show_speedtest() -> None:
         console.print("\n[green]已取消 Speedtest 测速。[/green]")
         return
 
+    print_speedtest_result(result)
+
+
+def print_speedtest_result(result: SpeedtestResult) -> None:
+    """Print a speedtest result with Mbps and MB/s units."""
     table = Table(title="Speedtest 测速结果")
     table.add_column("Metric", style="bold cyan")
     table.add_column("Value", justify="right")
     table.add_row("Ping", f"{result.ping_ms:.2f} ms")
-    table.add_row("Download", f"{result.download_mbps:.2f} Mbps")
-    table.add_row("Upload", f"{result.upload_mbps:.2f} Mbps")
-    table.add_row("Server", f"{result.server_sponsor} ({result.server_name})")
+    table.add_row("Download", f"{result.download_mbps:.2f} Mbps / {result.download_mbs:.2f} MB/s")
+    table.add_row("Upload", f"{result.upload_mbps:.2f} Mbps / {result.upload_mbs:.2f} MB/s")
+    table.add_row("Server", f"{result.server_sponsor} ({result.server_name}, ID: {result.server_id})")
     console.print(table)
+
+    if is_speedtest_result_suspicious(result):
+        console.print("[yellow]测速结果看起来偏低或异常，建议尝试“选择服务器测速”。[/yellow]")
+
+
+def is_speedtest_result_suspicious(result: SpeedtestResult) -> bool:
+    """Return True for clearly invalid or suspicious Speedtest results."""
+    return result.download_bps <= 0 or result.upload_bps <= 0 or result.ping_ms <= 0
 
 
 def main() -> None:
@@ -168,7 +237,7 @@ def main() -> None:
     try:
         while True:
             console.print(build_menu())
-            choice = Prompt.ask("请选择功能", choices=["1", "2", "3", "4", "5"], default="1")
+            choice = Prompt.ask("请选择功能", choices=["1", "2", "3", "4", "5", "6"], default="1")
 
             if choice == "1":
                 show_realtime_traffic()
@@ -177,8 +246,10 @@ def main() -> None:
             elif choice == "3":
                 show_lan_scan()
             elif choice == "4":
-                show_speedtest()
+                show_auto_speedtest()
             elif choice == "5":
+                show_manual_speedtest()
+            elif choice == "6":
                 console.print("[green]再见。[/green]")
                 break
     except (KeyboardInterrupt, EOFError):

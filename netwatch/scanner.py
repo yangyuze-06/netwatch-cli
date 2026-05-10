@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import platform
+import re
 import socket
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,6 +19,7 @@ class HostScanResult:
 
     ip: str
     is_online: bool
+    mac: str | None = None
     hostname: str | None = None
 
 
@@ -62,18 +64,64 @@ def resolve_hostname(ip_address: str) -> str | None:
         return None
 
 
+def get_arp_table() -> dict[str, dict[str, str | None]]:
+    """Read the local ARP table and return IP to MAC/hostname metadata."""
+    if platform.system().lower() == "windows":
+        command = ["arp", "-a"]
+    else:
+        command = ["arp", "-a"]
+
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=3,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+
+    if completed.returncode != 0:
+        return {}
+
+    return parse_arp_output(completed.stdout)
+
+
+def parse_arp_output(output: str) -> dict[str, dict[str, str | None]]:
+    """Parse common arp -a output, especially macOS IP/MAC/hostname rows."""
+    entries: dict[str, dict[str, str | None]] = {}
+    pattern = re.compile(
+        r"^(?P<host>\S+)\s+\((?P<ip>\d{1,3}(?:\.\d{1,3}){3})\)\s+at\s+"
+        r"(?P<mac>[0-9a-fA-F:]{2}(?::[0-9a-fA-F]{2}){5}|<incomplete>)"
+    )
+
+    for line in output.splitlines():
+        match = pattern.search(line.strip())
+        if not match:
+            continue
+
+        hostname = match.group("host")
+        mac = match.group("mac")
+        entries[match.group("ip")] = {
+            "hostname": None if hostname == "?" else hostname,
+            "mac": None if mac == "<incomplete>" else mac.lower(),
+        }
+
+    return entries
+
+
 def scan_network(
     network: ipaddress.IPv4Network | None = None,
     *,
     workers: int = 64,
-    resolve_names: bool = False,
 ) -> list[HostScanResult]:
     """Ping all usable hosts in a network and return online hosts."""
     target_network = network or infer_local_network()
     if target_network is None:
         return []
 
-    results: list[HostScanResult] = []
+    online_hosts: list[str] = []
     hosts = [str(ip) for ip in target_network.hosts()]
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -82,7 +130,14 @@ def scan_network(
             host = futures[future]
             is_online = future.result()
             if is_online:
-                hostname = resolve_hostname(host) if resolve_names else None
-                results.append(HostScanResult(ip=host, is_online=True, hostname=hostname))
+                online_hosts.append(host)
+
+    arp_table = get_arp_table()
+    results = []
+    for host in online_hosts:
+        arp_entry = arp_table.get(host, {})
+        hostname = resolve_hostname(host) or arp_entry.get("hostname")
+        mac = arp_entry.get("mac")
+        results.append(HostScanResult(ip=host, is_online=True, mac=mac, hostname=hostname))
 
     return sorted(results, key=lambda result: ipaddress.ip_address(result.ip))
