@@ -8,15 +8,29 @@
 - 查看本机网络信息：显示网卡名称、IPv4 地址和 MAC 地址。
 - 局域网设备发现：支持快速扫描、增强扫描、仅从路由器同步设备列表。
 - 运行带宽测速：主动连接公网测速服务器，显示 ping、download Mbps/MB/s 和 upload Mbps/MB/s。
+- 代理/当前出口测速：显示 CLI 当前公网出口，再使用最佳可用测速后端测速。
 - 打开路由器管理后台：自动识别默认网关，并提供常见品牌后台入口。
-- 高级功能：列出 Speedtest 服务器、手动指定 server id 测速、显示测速后端信息。
+- 高级功能：列出 Speedtest 服务器、手动指定 server id 测速、显示测速后端信息和 Ookla selection details。
 - 使用 `rich` 美化命令行输出。
 
 ## 实时网卡流量 vs Speedtest 最大带宽
 
 实时网卡流量来自 `psutil.net_io_counters()`，表示当前这一秒经过本机网卡的上传/下载流量。它适合观察“现在有没有流量”“当前应用大概用了多少吞吐”，但不代表宽带线路的最大能力。
 
-Speedtest 测速使用 `speedtest-cli` 主动选择测速服务器，并分别压测下载和上传能力。`speedtest` 库返回的是 bit/s。
+V0.8 以后测速使用多后端架构，优先级是：
+
+1. `official-ookla-cli`：官方 Ookla CLI，推荐，通常更接近网页测速或官方客户端。
+2. `librespeed-cli`：开源备选测速后端，测速网络和 Ookla 不同。
+3. `python-speedtest-cli`：Python 社区版 fallback，结果可能低于网页测速或官方客户端。
+
+macOS 推荐安装官方 Ookla CLI：
+
+```bash
+brew tap teamookla/speedtest
+brew install speedtest
+```
+
+不要把 `brew install speedtest-cli` 当成官方 Ookla CLI；`speedtest-cli` 是社区版工具，Homebrew 已标记为 deprecated。Python fallback 可通过 `pip install speedtest-cli` 安装。
 
 `Mbps` 是 megabits per second，常用于运营商宽带标称速度；`MB/s` 是 megabytes per second，更接近日常下载文件时看到的速度。换算规则：
 
@@ -26,6 +40,16 @@ MB/s = bit/s / 8 / 1_000_000
 ```
 
 自动测速的服务器选择可能受地理位置、运营商路由、服务器负载影响而波动。如果结果明显异常，可以使用“选择服务器测速”，先列出附近服务器，再手动输入 server id。
+
+## 代理/当前出口测速
+
+“代理/当前出口测速”会先请求 `https://ipinfo.io/json`，显示当前 CLI 进程看到的公网出口 IP、城市、国家/地区和 ISP/组织，然后调用最佳可用测速后端。
+
+限制：
+
+- TUN/VPN 模式通常会影响 CLI 出口。
+- 浏览器代理通常只影响浏览器，不一定影响 CLI。
+- 本工具只检测当前 CLI 进程实际看到的公网出口，不保存公网 IP。
 
 ## 为什么可能需要手动选择网卡
 
@@ -144,14 +168,15 @@ netwatch
 2. 查看本机网络信息
 3. 局域网设备发现
 4. 带宽测速
-5. 打开路由器管理后台
-6. 高级功能
-7. 退出
+5. 代理/当前出口测速
+6. 打开路由器管理后台
+7. 高级功能
+8. 退出
 ```
 
 查看实时网卡流量时，按 `Ctrl+C` 返回菜单。主菜单按 `Ctrl+C` 会优雅退出。
 
-如果运行 Speedtest 时提示未安装依赖，请执行：
+如果只能使用 Python fallback，可执行：
 
 ```bash
 pip install speedtest-cli
@@ -174,12 +199,15 @@ pip install speedtest-cli
 - 增加单元测试和 CI。
 - 增加跨平台 ping 参数适配测试。
 - 支持 Speedtest 结果历史记录。
+- 集成官方 Ookla CLI 安装检测和更丰富的 selection details 展示。
+- 支持更多测速后端和结果对比。
 
 更多 V0.2 修复记录见 [docs/v0.2-plan.md](docs/v0.2-plan.md)。
 更多 V0.3 修复记录见 [docs/v0.3-plan.md](docs/v0.3-plan.md)。
 更多 V0.5 修复记录见 [docs/v0.5-plan.md](docs/v0.5-plan.md)。
 更多 V0.6 修复记录见 [docs/v0.6-plan.md](docs/v0.6-plan.md)。
 更多 V0.7 修复记录见 [docs/v0.7-plan.md](docs/v0.7-plan.md)。
+更多 V0.8 修复记录见 [docs/v0.8-plan.md](docs/v0.8-plan.md)。
 
 ## 为什么部分设备无法显示主机名
 

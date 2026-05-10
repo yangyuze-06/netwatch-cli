@@ -1,136 +1,78 @@
-"""Speedtest.net bandwidth test helpers."""
+"""Speedtest backend scheduler."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable
+from netwatch.speedtest_backends import librespeed_cli, ookla_cli, python_speedtest
+from netwatch.speedtest_backends.models import SpeedtestResult
+
+BACKEND_PRIORITY = ("official-ookla-cli", "librespeed-cli", "python-speedtest-cli")
 
 
-@dataclass(frozen=True)
-class SpeedtestResult:
-    """Measured internet bandwidth test result."""
-
-    ping_ms: float
-    download_bps: float
-    upload_bps: float
-    server_name: str
-    server_sponsor: str
-    server_id: str
-
-    @property
-    def download_mbps(self) -> float:
-        """Download speed in megabits per second."""
-        return self.download_bps / 1_000_000
-
-    @property
-    def download_mbs(self) -> float:
-        """Download speed in megabytes per second."""
-        return self.download_bps / 8 / 1_000_000
-
-    @property
-    def upload_mbps(self) -> float:
-        """Upload speed in megabits per second."""
-        return self.upload_bps / 1_000_000
-
-    @property
-    def upload_mbs(self) -> float:
-        """Upload speed in megabytes per second."""
-        return self.upload_bps / 8 / 1_000_000
+def get_available_backends() -> list[str]:
+    """Return available speedtest backends in priority order."""
+    available: list[str] = []
+    if ookla_cli.is_available():
+        available.append("official-ookla-cli")
+    if librespeed_cli.is_available():
+        available.append("librespeed-cli")
+    if python_speedtest.is_available():
+        available.append("python-speedtest-cli")
+    return available
 
 
-@dataclass(frozen=True)
-class SpeedtestServer:
-    """A nearby Speedtest server option."""
-
-    id: str
-    sponsor: str
-    name: str
-    country: str
-    distance_km: float | None
-    latency_ms: float | None = None
-
-
-class SpeedtestUnavailableError(RuntimeError):
-    """Raised when speedtest-cli is not installed."""
-
-
-class SpeedtestRunError(RuntimeError):
-    """Raised when speedtest-cli fails to complete a test."""
-
-
-def list_nearby_servers(limit: int = 10) -> list[SpeedtestServer]:
-    """Return nearby Speedtest servers for manual selection."""
-    try:
-        import speedtest
-    except ModuleNotFoundError as exc:
-        raise SpeedtestUnavailableError("speedtest-cli is not installed") from exc
-
-    try:
-        tester = speedtest.Speedtest()
-        servers = tester.get_closest_servers(limit=limit)
-    except speedtest.SpeedtestException as exc:
-        raise SpeedtestRunError(str(exc)) from exc
-    except OSError as exc:
-        raise SpeedtestRunError(str(exc)) from exc
-    except Exception as exc:
-        raise SpeedtestRunError(str(exc)) from exc
-
-    return [
-        SpeedtestServer(
-            id=str(server.get("id", "-")),
-            sponsor=str(server.get("sponsor", "-")),
-            name=str(server.get("name", "-")),
-            country=str(server.get("country", "-")),
-            distance_km=_optional_float(server.get("d")),
-            latency_ms=_optional_float(server.get("latency")),
-        )
-        for server in servers
-    ]
-
-
-def run_speedtest(
-    progress: Callable[[str], None] | None = None,
-    server_id: str | None = None,
-) -> SpeedtestResult:
-    """Run a Speedtest.net test and return ping/download/upload metrics."""
-    try:
-        import speedtest
-    except ModuleNotFoundError as exc:
-        raise SpeedtestUnavailableError("speedtest-cli is not installed") from exc
-
-    try:
-        tester = speedtest.Speedtest()
-        if progress:
-            progress("正在选择最佳服务器..." if server_id is None else f"正在选择服务器 {server_id}...")
-        if server_id is not None:
-            tester.get_servers([int(server_id)])
-        server = tester.get_best_server()
-        if progress:
-            progress("正在测试下载速度...")
-        tester.download()
-        if progress:
-            progress("正在测试上传速度...")
-        tester.upload(pre_allocate=True)
-    except speedtest.SpeedtestException as exc:
-        raise SpeedtestRunError(str(exc)) from exc
-    except OSError as exc:
-        raise SpeedtestRunError(str(exc)) from exc
-    except Exception as exc:
-        raise SpeedtestRunError(str(exc)) from exc
+def run_best_speedtest() -> SpeedtestResult:
+    """Run the best available speedtest backend."""
+    for backend in BACKEND_PRIORITY:
+        if backend in get_available_backends():
+            return run_speedtest_with_backend(backend)
 
     return SpeedtestResult(
-        ping_ms=float(tester.results.ping),
-        download_bps=float(tester.results.download),
-        upload_bps=float(tester.results.upload),
-        server_name=str(server.get("name", "-")),
-        server_sponsor=str(server.get("sponsor", "-")),
-        server_id=str(server.get("id", server_id or "-")),
+        backend="none",
+        error=(
+            "没有可用测速后端。\n"
+            "推荐安装官方 Ookla CLI：\n"
+            "brew tap teamookla/speedtest\n"
+            "brew install speedtest"
+        ),
     )
 
 
-def _optional_float(value: object) -> float | None:
-    """Convert speedtest metadata to float when available."""
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+def run_speedtest_with_backend(backend: str, server_id: str | None = None) -> SpeedtestResult:
+    """Run a selected backend."""
+    if backend == "official-ookla-cli":
+        return ookla_cli.run_speedtest(server_id=server_id)
+    if backend == "librespeed-cli":
+        if server_id:
+            return SpeedtestResult(backend=backend, error="LibreSpeed CLI backend does not support Ookla server id.")
+        return librespeed_cli.run_speedtest()
+    if backend == "python-speedtest-cli":
+        return python_speedtest.run_speedtest(server_id=server_id)
+    return SpeedtestResult(backend=backend, error=f"未知测速后端：{backend}")
+
+
+def list_speedtest_servers() -> list[dict]:
+    """List servers from the best available server-list-capable backend."""
+    if ookla_cli.is_available():
+        return ookla_cli.list_servers()
+    if python_speedtest.is_available():
+        return python_speedtest.list_servers()
+    return [{"error": "当前后端无法获取服务器列表。建议使用“带宽测速”自动模式，或安装官方 Ookla CLI。"}]
+
+
+def show_backend_info() -> dict:
+    """Return speedtest backend information."""
+    return {
+        "priority": list(BACKEND_PRIORITY),
+        "available": get_available_backends(),
+        "install_ookla_macos": ["brew tap teamookla/speedtest", "brew install speedtest"],
+        "notes": {
+            "official-ookla-cli": "推荐后端，最接近官方客户端和网页测速。",
+            "librespeed-cli": "开源备选后端，测速网络和 Ookla 不同。",
+            "python-speedtest-cli": "最后 fallback，结果可能低于网页测速或官方 Ookla CLI。",
+        },
+    }
+
+
+def get_selection_details() -> str | dict | None:
+    """Return Ookla server selection details when available."""
+    return ookla_cli.get_selection_details()
