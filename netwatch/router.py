@@ -145,7 +145,8 @@ def fetch_xiaomi_device_list(router_ip: str, stok: str) -> list[RouterDevice]:
         raise RouterApiError(str(payload.get("msg") or f"路由器 API 返回 code={code}"))
 
     raw_devices = extract_device_records(payload)
-    return [device for raw in raw_devices if (device := normalize_xiaomi_device(raw)) is not None]
+    devices = [device for raw in raw_devices if (device := normalize_xiaomi_device(raw)) is not None]
+    return deduplicate_router_devices(devices)
 
 
 def _fetch_xiaomi_json(router_ip: str, stok: str, *, mlo: bool) -> dict[str, Any]:
@@ -205,6 +206,67 @@ def normalize_xiaomi_device(raw: dict[str, Any]) -> RouterDevice | None:
         source="xiaomi-router-api",
         raw=raw,
     )
+
+
+def deduplicate_router_devices(devices: list[RouterDevice]) -> list[RouterDevice]:
+    """Deduplicate router devices by MAC first, then IP."""
+    merged: list[RouterDevice] = []
+
+    for device in devices:
+        match_index = find_matching_router_device(merged, device)
+        if match_index is None:
+            merged.append(device)
+            continue
+
+        merged[match_index] = merge_router_device_pair(merged[match_index], device)
+
+    return sorted(merged, key=lambda device: ip_sort_key(device.ip or "-"))
+
+
+def find_matching_router_device(devices: list[RouterDevice], candidate: RouterDevice) -> int | None:
+    """Find an existing router device by MAC first, then IP."""
+    candidate_mac = candidate.mac or ""
+    if candidate_mac:
+        for index, device in enumerate(devices):
+            if device.mac and device.mac == candidate_mac:
+                return index
+
+    candidate_ip = candidate.ip
+    if candidate_ip:
+        for index, device in enumerate(devices):
+            if device.ip == candidate_ip:
+                return index
+    return None
+
+
+def merge_router_device_pair(first: RouterDevice, second: RouterDevice) -> RouterDevice:
+    """Merge two router records for the same device."""
+    return RouterDevice(
+        name=preferred_text(first.name, second.name),
+        ip=preferred_text(first.ip, second.ip),
+        mac=preferred_text(first.mac, second.mac),
+        online=first.online or second.online,
+        connect_type=merge_connect_type(first.connect_type, second.connect_type),
+        source="xiaomi-router-api",
+        raw={"merged": [first.raw, second.raw]},
+    )
+
+
+def preferred_text(*values: str | None) -> str | None:
+    """Return the first meaningful non-placeholder text value."""
+    for value in values:
+        if value and value.strip() and value.strip() != "-":
+            return value
+    return None
+
+
+def merge_connect_type(*values: str | None) -> str | None:
+    """Merge non-empty connection type fields."""
+    seen: list[str] = []
+    for value in values:
+        if value and value.strip() and value.strip() != "-" and value not in seen:
+            seen.append(value)
+    return ", ".join(seen) if seen else None
 
 
 def normalize_ip(value: Any) -> str | None:

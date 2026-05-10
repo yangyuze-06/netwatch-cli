@@ -23,7 +23,6 @@ from netwatch.router import (
     get_default_gateway,
     mask_stok,
     merge_devices,
-    open_router_admin,
     router_devices_to_network_devices,
     scan_results_to_network_devices,
 )
@@ -47,12 +46,11 @@ def build_menu() -> Panel:
         [
             "[bold cyan]1[/bold cyan]. 查看实时网卡流量",
             "[bold cyan]2[/bold cyan]. 查看本机网络信息",
-            "[bold cyan]3[/bold cyan]. 扫描局域网在线设备",
-            "[bold cyan]4[/bold cyan]. 运行带宽测速",
-            "[bold cyan]5[/bold cyan]. 打开路由器后台",
-            "[bold cyan]6[/bold cyan]. 从小米路由器同步设备名",
-            "[bold cyan]7[/bold cyan]. 高级功能",
-            "[bold cyan]8[/bold cyan]. 退出",
+            "[bold cyan]3[/bold cyan]. 局域网设备发现",
+            "[bold cyan]4[/bold cyan]. 带宽测速",
+            "[bold cyan]5[/bold cyan]. 打开路由器管理后台",
+            "[bold cyan]6[/bold cyan]. 高级功能",
+            "[bold cyan]7[/bold cyan]. 退出",
         ]
     )
     return Panel(menu, title="netwatch-cli", subtitle="轻量级网络状态工具", border_style="cyan")
@@ -98,12 +96,12 @@ def show_network_info() -> None:
     console.print(table)
 
 
-def show_lan_scan() -> None:
-    """Scan the inferred /24 local network and show online hosts."""
+def run_lan_scan() -> list[NetworkDevice] | None:
+    """Scan the inferred /24 local network and return unified devices."""
     global LAST_SCAN_DEVICES
     candidate = choose_lan_scan_candidate()
     if candidate is None:
-        return
+        return None
 
     network = candidate.network
     console.print(f"[bold]当前选择的网卡名称：[/bold]{candidate.name}")
@@ -112,7 +110,7 @@ def show_lan_scan() -> None:
 
     if not Confirm.ask("是否继续扫描？", default=False):
         console.print("[yellow]已取消局域网扫描。[/yellow]")
-        return
+        return None
 
     with console.status("[bold green]正在 ping 扫描局域网在线设备...[/bold green]"):
         results = scan_network(network)
@@ -125,6 +123,66 @@ def show_lan_scan() -> None:
     else:
         console.print("[yellow]未发现在线主机，或当前环境禁用了 ping 响应。[/yellow]")
         console.print("[yellow]Found 0 online devices.[/yellow]")
+
+    return LAST_SCAN_DEVICES
+
+
+def show_lan_discovery_menu() -> None:
+    """Run LAN device discovery submenu."""
+    while True:
+        console.print(build_lan_discovery_menu())
+        choice = Prompt.ask("请选择局域网设备发现功能", choices=["1", "2", "3", "4"], default="1")
+        if choice == "1":
+            run_lan_scan()
+        elif choice == "2":
+            show_enhanced_lan_discovery()
+        elif choice == "3":
+            show_router_only_device_sync()
+        elif choice == "4":
+            break
+
+
+def build_lan_discovery_menu() -> Panel:
+    """Build LAN discovery submenu."""
+    menu = "\n".join(
+        [
+            "[bold cyan]1[/bold cyan]. 快速扫描：Ping + ARP",
+            "[bold cyan]2[/bold cyan]. 增强扫描：Ping + ARP + 路由器设备名",
+            "[bold cyan]3[/bold cyan]. 仅从路由器同步设备列表",
+            "[bold cyan]4[/bold cyan]. 返回主菜单",
+        ]
+    )
+    return Panel(menu, title="局域网设备发现", border_style="cyan")
+
+
+def show_enhanced_lan_discovery() -> None:
+    """Run LAN scan and optionally merge Xiaomi router device names."""
+    scan_devices = run_lan_scan()
+    if scan_devices is None:
+        return
+
+    if not Confirm.ask("是否从路由器同步设备名？", default=True):
+        return
+
+    router_devices = prompt_and_fetch_xiaomi_router_devices()
+    if router_devices is None:
+        console.print("[yellow]已回退到快速扫描结果。[/yellow]")
+        print_network_devices(scan_devices, title="快速扫描结果")
+        return
+
+    devices = merge_devices(scan_devices, router_devices)
+    print_network_devices(devices, title="增强扫描结果")
+
+
+def show_router_only_device_sync() -> None:
+    """Fetch router devices without ping scanning."""
+    router_devices = prompt_and_fetch_xiaomi_router_devices()
+    if router_devices is None:
+        return
+
+    devices = router_devices_to_network_devices(router_devices)
+    print_network_devices(devices, title="路由器设备列表")
+    console.print("[yellow]如需确认当前在线连通性，请运行“快速扫描”或“增强扫描”。[/yellow]")
 
 
 def choose_lan_scan_candidate() -> NetworkCandidate | None:
@@ -193,7 +251,11 @@ def show_speedtest_servers():
         console.print("[bold]pip install speedtest-cli[/bold]")
         return
     except SpeedtestRunError as exc:
-        console.print(f"[red]获取测速服务器失败：{exc}[/red]")
+        message = str(exc)
+        if "403" in message:
+            console.print("[yellow]当前 speedtest-cli 后端无法获取服务器列表。建议使用“带宽测速”自动模式，或后续安装官方 Ookla CLI。[/yellow]")
+        else:
+            console.print(f"[red]获取测速服务器失败：{message}[/red]")
         return
     except KeyboardInterrupt:
         console.print("\n[green]已取消 Speedtest 测速。[/green]")
@@ -258,7 +320,7 @@ def print_speedtest_result(result: SpeedtestResult) -> None:
     console.print(table)
 
     if is_speedtest_result_suspicious(result):
-        console.print("[yellow]测速结果看起来偏低或异常，建议尝试“选择服务器测速”。[/yellow]")
+        console.print("[yellow]测速结果看起来偏低或异常，可在“高级功能”中手动指定 Speedtest server id。[/yellow]")
 
 
 def is_speedtest_result_suspicious(result: SpeedtestResult) -> bool:
@@ -267,23 +329,71 @@ def is_speedtest_result_suspicious(result: SpeedtestResult) -> bool:
 
 
 def show_open_router_admin() -> None:
-    """Open the router admin page in the default browser."""
-    gateway = get_default_gateway()
-    if not gateway:
-        gateway = Prompt.ask("请输入路由器地址，例如 192.168.31.1").strip()
-    if not gateway:
-        console.print("[yellow]未提供路由器地址。[/yellow]")
-        return
-
-    url = open_router_admin(gateway)
+    """Open a selected router admin page in the default browser."""
+    url = choose_router_admin_url()
     if url is None:
-        console.print("[red]无法打开路由器后台。[/red]")
         return
-    console.print(f"[green]正在打开路由器后台：{url}[/green]")
+    console.print(f"[green]正在打开路由器管理后台：{url}[/green]")
+    import webbrowser
+
+    webbrowser.open(url)
 
 
-def show_sync_xiaomi_router_devices() -> None:
-    """Fetch Xiaomi router device names and merge them with scan results."""
+def choose_router_admin_url() -> str | None:
+    """Let the user choose a common router admin URL."""
+    gateway = get_default_gateway()
+    options: list[tuple[str, str]] = []
+    if gateway:
+        options.append((f"http://{gateway}/", "当前默认网关，推荐"))
+
+    options.extend(
+        [
+            ("http://192.168.31.1/", "小米 / Redmi 常见"),
+            ("http://miwifi.com/", "小米 / Redmi"),
+            ("http://192.168.0.1/", "TP-Link / Netgear / D-Link 常见"),
+            ("http://192.168.1.1/", "TP-Link / ASUS / Linksys 常见"),
+            ("http://192.168.50.1/", "ASUS 常见"),
+            ("http://tplinkwifi.net/", "TP-Link"),
+            ("http://router.asus.com/", "ASUS"),
+        ]
+    )
+
+    console.print("[bold]检测到当前默认网关：[/bold]" if gateway else "[yellow]未检测到当前默认网关。[/yellow]")
+    table = Table(title="路由器管理后台入口")
+    table.add_column("#", justify="right")
+    table.add_column("URL", style="bold cyan")
+    table.add_column("说明")
+
+    for index, (url, description) in enumerate(options, start=1):
+        table.add_row(str(index), url, description)
+    manual_index = len(options) + 1
+    table.add_row(str(manual_index), "手动输入", "输入 IP、域名或完整 URL")
+    table.add_row("0", "返回", "返回主菜单")
+    console.print(table)
+
+    choices = [str(index) for index in range(1, manual_index + 1)] + ["0"]
+    default = "1" if gateway else str(manual_index)
+    choice = Prompt.ask("请选择要打开的入口", choices=choices, default=default)
+
+    if choice == "0":
+        return None
+    if int(choice) == manual_index:
+        manual_url = Prompt.ask("请输入路由器地址或 URL").strip()
+        return normalize_router_admin_url(manual_url)
+    return options[int(choice) - 1][0]
+
+
+def normalize_router_admin_url(value: str) -> str | None:
+    """Normalize user router admin input to a URL."""
+    if not value:
+        return None
+    if value.startswith(("http://", "https://")):
+        return value
+    return f"http://{value}/"
+
+
+def prompt_and_fetch_xiaomi_router_devices() -> list[RouterDevice] | None:
+    """Prompt for Xiaomi router URL and fetch device list."""
     global LAST_ROUTER_DEVICES
     gateway = get_default_gateway()
     if not gateway:
@@ -299,7 +409,7 @@ def show_sync_xiaomi_router_devices() -> None:
     stok = extract_xiaomi_stok(pasted_url)
     if not stok:
         console.print("[red]未能从输入中提取 ;stok= token。[/red]")
-        return
+        return None
 
     console.print(f"[dim]stok: {mask_stok(stok)}[/dim]")
     try:
@@ -307,20 +417,11 @@ def show_sync_xiaomi_router_devices() -> None:
     except RouterApiError as exc:
         console.print(f"[red]{exc}[/red]")
         console.print("[yellow]已回退到 ARP / reverse DNS / mDNS 可获得的信息。[/yellow]")
-        if LAST_SCAN_DEVICES:
-            print_network_devices(LAST_SCAN_DEVICES, title="最近一次扫描结果")
-        return
+        return None
 
     LAST_ROUTER_DEVICES = router_devices
     console.print(f"[green]从路由器同步到 {len(router_devices)} 台设备。[/green]")
-
-    if LAST_SCAN_DEVICES:
-        devices = merge_devices(LAST_SCAN_DEVICES, router_devices)
-        print_network_devices(devices, title="合并后的设备列表")
-    else:
-        devices = router_devices_to_network_devices(router_devices)
-        print_network_devices(devices, title="路由器设备列表")
-        console.print("[yellow]如需确认当前在线连通性，请再运行“扫描局域网在线设备”。[/yellow]")
+    return router_devices
 
 
 def print_network_devices(devices: list[NetworkDevice], *, title: str, debug: bool = False) -> None:
@@ -386,23 +487,21 @@ def main() -> None:
     try:
         while True:
             console.print(build_menu())
-            choice = Prompt.ask("请选择功能", choices=["1", "2", "3", "4", "5", "6", "7", "8"], default="1")
+            choice = Prompt.ask("请选择功能", choices=["1", "2", "3", "4", "5", "6", "7"], default="1")
 
             if choice == "1":
                 show_realtime_traffic()
             elif choice == "2":
                 show_network_info()
             elif choice == "3":
-                show_lan_scan()
+                show_lan_discovery_menu()
             elif choice == "4":
                 show_auto_speedtest()
             elif choice == "5":
                 show_open_router_admin()
             elif choice == "6":
-                show_sync_xiaomi_router_devices()
-            elif choice == "7":
                 show_advanced_menu()
-            elif choice == "8":
+            elif choice == "7":
                 console.print("[green]再见。[/green]")
                 break
     except (KeyboardInterrupt, EOFError):

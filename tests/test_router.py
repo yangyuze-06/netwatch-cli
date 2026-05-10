@@ -1,6 +1,7 @@
 from netwatch.router import (
     NetworkDevice,
     RouterDevice,
+    deduplicate_router_devices,
     extract_xiaomi_stok,
     merge_devices,
     normalize_xiaomi_device,
@@ -147,3 +148,60 @@ destination: default
 """
 
     assert parse_macos_default_gateway(output) == "192.168.31.1"
+
+
+def test_deduplicate_same_ip_complete_and_empty_record() -> None:
+    devices = deduplicate_router_devices(
+        [
+            RouterDevice("MacBook-Air", "192.168.31.75", "a0:9a:8e:84:82:f6", True, "wifi", "xiaomi-router-api", {}),
+            RouterDevice(None, "192.168.31.75", None, True, None, "xiaomi-router-api", {}),
+        ]
+    )
+
+    assert len(devices) == 1
+    assert devices[0].name == "MacBook-Air"
+    assert devices[0].ip == "192.168.31.75"
+    assert devices[0].mac == "a0:9a:8e:84:82:f6"
+
+
+def test_deduplicate_same_mac_multiple_records() -> None:
+    devices = deduplicate_router_devices(
+        [
+            RouterDevice(None, "192.168.31.10", "aa:bb:cc:dd:ee:ff", False, None, "xiaomi-router-api", {}),
+            RouterDevice("Phone", None, "aa:bb:cc:dd:ee:ff", True, "5GHz", "xiaomi-router-api", {}),
+        ]
+    )
+
+    assert len(devices) == 1
+    assert devices[0].name == "Phone"
+    assert devices[0].ip == "192.168.31.10"
+    assert devices[0].mac == "aa:bb:cc:dd:ee:ff"
+    assert devices[0].online is True
+    assert devices[0].connect_type == "5GHz"
+
+
+def test_deduplicate_same_ip_without_mac() -> None:
+    devices = deduplicate_router_devices(
+        [
+            RouterDevice(None, "192.168.31.20", None, False, None, "xiaomi-router-api", {}),
+            RouterDevice("Camera", "192.168.31.20", None, True, "2.4GHz", "xiaomi-router-api", {}),
+        ]
+    )
+
+    assert len(devices) == 1
+    assert devices[0].name == "Camera"
+    assert devices[0].ip == "192.168.31.20"
+    assert devices[0].mac is None
+    assert devices[0].online is True
+
+
+def test_deduplicate_keeps_meaningful_name() -> None:
+    devices = deduplicate_router_devices(
+        [
+            RouterDevice("-", "192.168.31.30", "11:22:33:44:55:66", False, None, "xiaomi-router-api", {}),
+            RouterDevice("NOMI-IPC", "192.168.31.30", None, True, None, "xiaomi-router-api", {}),
+        ]
+    )
+
+    assert len(devices) == 1
+    assert devices[0].name == "NOMI-IPC"
