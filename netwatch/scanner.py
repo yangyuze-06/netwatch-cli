@@ -66,26 +66,53 @@ def resolve_hostname(ip_address: str) -> str | None:
 
 def get_arp_table() -> dict[str, dict[str, str | None]]:
     """Read the local ARP table and return IP to MAC/hostname metadata."""
-    if platform.system().lower() == "windows":
-        command = ["arp", "-a"]
-    else:
-        command = ["arp", "-a"]
+    commands = [["arp", "-a"]]
+    if platform.system().lower() != "windows":
+        # macOS can spend several seconds doing reverse lookups for `arp -a`.
+        # Numeric mode returns MAC data quickly; plain `arp -a` is only a
+        # best-effort hostname enrichment pass.
+        commands = [["arp", "-an"], ["arp", "-a"]]
 
+    entries: dict[str, dict[str, str | None]] = {}
+
+    for command in commands:
+        output = run_arp_command(command)
+        if output:
+            merge_arp_entries(entries, parse_arp_output(output))
+
+    return entries
+
+
+def run_arp_command(command: list[str], timeout_seconds: int = 3) -> str:
+    """Run an arp command and return stdout, or an empty string on failure."""
     try:
         completed = subprocess.run(
             command,
             capture_output=True,
             check=False,
             text=True,
-            timeout=3,
+            timeout=timeout_seconds,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return {}
+        return ""
 
     if completed.returncode != 0:
-        return {}
+        return ""
 
-    return parse_arp_output(completed.stdout)
+    return completed.stdout
+
+
+def merge_arp_entries(
+    target: dict[str, dict[str, str | None]],
+    source: dict[str, dict[str, str | None]],
+) -> None:
+    """Merge ARP metadata without replacing useful values with empty ones."""
+    for ip_address, source_entry in source.items():
+        target_entry = target.setdefault(ip_address, {"hostname": None, "mac": None})
+        if source_entry.get("mac"):
+            target_entry["mac"] = source_entry["mac"]
+        if source_entry.get("hostname"):
+            target_entry["hostname"] = source_entry["hostname"]
 
 
 def parse_arp_output(output: str) -> dict[str, dict[str, str | None]]:
@@ -93,7 +120,7 @@ def parse_arp_output(output: str) -> dict[str, dict[str, str | None]]:
     entries: dict[str, dict[str, str | None]] = {}
     pattern = re.compile(
         r"^(?P<host>\S+)\s+\((?P<ip>\d{1,3}(?:\.\d{1,3}){3})\)\s+at\s+"
-        r"(?P<mac>[0-9a-fA-F:]{2}(?::[0-9a-fA-F]{2}){5}|<incomplete>)"
+        r"(?P<mac>(?:[0-9a-fA-F]{1,2}:){5}[0-9a-fA-F]{1,2}|[<(]incomplete[>)])"
     )
 
     for line in output.splitlines():
@@ -102,13 +129,38 @@ def parse_arp_output(output: str) -> dict[str, dict[str, str | None]]:
             continue
 
         hostname = match.group("host")
-        mac = match.group("mac")
+        mac = normalize_mac_address(match.group("mac"))
+        if mac is None:
+            continue
+
         entries[match.group("ip")] = {
             "hostname": None if hostname == "?" else hostname,
-            "mac": None if mac == "<incomplete>" else mac.lower(),
+            "mac": mac,
         }
 
     return entries
+
+
+def normalize_mac_address(mac_address: str) -> str | None:
+    """Normalize a MAC address to six two-digit lowercase hex segments."""
+    if mac_address.lower() in {"<incomplete>", "(incomplete)"}:
+        return None
+
+    parts = mac_address.split(":")
+    if len(parts) != 6:
+        return None
+
+    normalized_parts: list[str] = []
+    for part in parts:
+        if not 1 <= len(part) <= 2:
+            return None
+        try:
+            value = int(part, 16)
+        except ValueError:
+            return None
+        normalized_parts.append(f"{value:02x}")
+
+    return ":".join(normalized_parts)
 
 
 def scan_network(
