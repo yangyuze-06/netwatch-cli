@@ -8,10 +8,17 @@ from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
+from netwatch.config import (
+    clear_preferred_speedtest,
+    get_config_path,
+    get_preferred_speedtest,
+    save_preferred_speedtest,
+)
 from netwatch.network_info import (
     NetworkCandidate,
     get_display_network_interfaces,
     get_lan_scan_candidates,
+    get_preferred_physical_interface,
 )
 from netwatch.scanner import scan_network
 from netwatch.router import (
@@ -30,12 +37,17 @@ from netwatch.speed import format_speed, sample_network_speed
 from netwatch.proxy_probe import probe_exit_ip
 from netwatch.speedtest_runner import (
     SpeedtestResult,
+    filter_servers_by_keyword,
     get_available_backends,
+    get_last_successful_speedtest_result,
     get_selection_details,
+    get_speedtest_quality_warnings,
     list_speedtest_servers,
     run_best_speedtest,
+    run_configured_speedtest,
     run_speedtest_with_backend,
     show_backend_info,
+    summarize_speedtest_raw,
 )
 
 console = Console()
@@ -217,7 +229,31 @@ def choose_lan_scan_candidate() -> NetworkCandidate | None:
 def show_auto_speedtest() -> None:
     """Run the best available bandwidth test backend."""
     console.print("[dim]带宽测速会连接公网测速服务器，可能需要几十秒。[/dim]")
-    result = run_best_speedtest()
+    preferred = get_preferred_speedtest()
+    if preferred:
+        server_label = " / ".join(
+            value
+            for value in (
+                str(preferred.get("server_name") or preferred.get("server_id") or ""),
+                str(preferred.get("location") or ""),
+            )
+            if value
+        )
+        console.print(f"[green]检测到常用测速服务器：{server_label or preferred.get('server_id')}[/green]")
+        if Confirm.ask("是否使用？", default=True):
+            result = run_configured_speedtest(preferred, fallback=True)
+            print_speedtest_result(result)
+            return
+
+    preferred_interface = get_preferred_physical_interface()
+    if preferred_interface:
+        console.print(
+            "[green]使用物理网卡测速："
+            f"{preferred_interface['name']} ({preferred_interface['ip']})[/green]"
+        )
+    else:
+        console.print("[yellow]未识别到真实物理网卡，将使用当前 CLI 默认出口测速。[/yellow]")
+    result = run_best_speedtest(use_interface=True)
     print_speedtest_result(result)
 
 
@@ -280,21 +316,31 @@ def show_speedtest_by_server_id() -> None:
     if not server_id:
         console.print("[yellow]server id 不能为空。[/yellow]")
         return
-    run_speedtest_with_server_id(server_id)
+    use_interface = Confirm.ask("是否使用物理网卡测速？", default=True)
+    result, interface = run_speedtest_with_server_id(server_id, use_interface=use_interface)
+    if not result.error and result.server_id and Confirm.ask("是否保存此服务器为默认测速服务器？", default=False):
+        save_result_as_preferred(result, interface)
 
 
-def run_speedtest_with_server_id(server_id: str) -> None:
+def run_speedtest_with_server_id(server_id: str, use_interface: bool = True) -> tuple[SpeedtestResult, str | None]:
     """Run Speedtest against a selected server id."""
     backend = "official-ookla-cli" if "official-ookla-cli" in get_available_backends() else "python-speedtest-cli"
-    result = run_speedtest_with_backend(backend, server_id=server_id)
+    interface = None
+    if backend == "official-ookla-cli" and use_interface:
+        preferred_interface = get_preferred_physical_interface()
+        if preferred_interface:
+            interface = preferred_interface["name"]
+            console.print(f"[green]使用物理网卡测速：{interface} ({preferred_interface['ip']})[/green]")
+    result = run_speedtest_with_backend(backend, server_id=server_id, interface=interface)
     print_speedtest_result(result)
+    return result, interface
 
 
 def print_speedtest_result(result: SpeedtestResult) -> None:
     """Print a unified speedtest result."""
     if result.error:
         console.print(f"[red]{result.error}[/red]")
-        if result.backend in {"none", "official-ookla-cli"}:
+        if result.backend == "none" or "Official Ookla CLI is not installed" in result.error:
             console.print("[yellow]推荐安装官方 Ookla CLI：[/yellow]")
             console.print("[bold]brew tap teamookla/speedtest[/bold]")
             console.print("[bold]brew install speedtest[/bold]")
@@ -323,6 +369,21 @@ def print_speedtest_result(result: SpeedtestResult) -> None:
         console.print(f"[dim]Packet loss: {result.packet_loss:.2f}%[/dim]")
     if result.backend == "python-speedtest-cli":
         console.print("[yellow]当前使用 Python speedtest-cli fallback，结果可能低于网页测速或官方 Ookla CLI。[/yellow]")
+    print_speedtest_quality_warning(result)
+
+
+def print_speedtest_quality_warning(result: SpeedtestResult) -> None:
+    """Print speedtest quality warning when result looks suspicious."""
+    reasons = get_speedtest_quality_warnings(result)
+    if not reasons:
+        return
+    console.print("[yellow]当前测速结果可能不代表真实最大带宽。[/yellow]")
+    console.print("[yellow]可能原因：[/yellow]")
+    console.print("[yellow]1. 测速服务器距离过远或线路不佳。[/yellow]")
+    console.print("[yellow]2. Ookla 自动选服不适合当前运营商。[/yellow]")
+    console.print("[yellow]3. 当前网络经过代理/TUN/VPN。[/yellow]")
+    console.print("[yellow]4. 建议尝试高级功能中的“指定测速服务器”或使用浏览器测速对照。[/yellow]")
+    console.print(f"[dim]触发条件：{', '.join(reasons)}[/dim]")
 
 
 def format_optional_ms(value: float | None) -> str:
@@ -358,8 +419,211 @@ def show_proxy_exit_speedtest() -> None:
     console.print("[dim]如果你使用 TUN/VPN 模式，CLI 通常会走代理出口。[/dim]")
     console.print("[dim]如果只是浏览器代理，CLI 可能仍然直连。[/dim]")
     console.print("[dim]本功能只检测当前 CLI 进程实际看到的公网出口。[/dim]")
-    result = run_best_speedtest()
+    console.print("[dim]代理/当前出口测速不会强制指定 en0/en1，会按当前 CLI 进程实际出口测速。[/dim]")
+    result = run_best_speedtest(use_interface=False)
     print_speedtest_result(result)
+
+
+def show_keyword_speedtest() -> None:
+    """Filter Ookla servers by keyword and test selected candidates."""
+    keyword = Prompt.ask("请输入服务器关键词，例如 Guangzhou / Guangdong / China Mobile / Hong Kong").strip()
+    if not keyword:
+        console.print("[yellow]关键词不能为空。[/yellow]")
+        return
+    run_keyword_speedtest(keyword)
+
+
+def run_keyword_speedtest(keyword: str) -> None:
+    """Run a server keyword speedtest flow."""
+    servers = list_speedtest_servers()
+    if not servers or servers[0].get("error"):
+        console.print("[yellow]当前后端无法获取服务器列表。建议使用“带宽测速”自动模式，或安装官方 Ookla CLI。[/yellow]")
+        if servers:
+            console.print(f"[dim]{servers[0].get('error')}[/dim]")
+        return
+
+    matches = filter_servers_by_keyword(servers, keyword, limit=10)
+    if not matches:
+        console.print(f"[yellow]未找到匹配 “{keyword}” 的服务器。[/yellow]")
+        return
+
+    print_server_matches(matches, title=f"关键词匹配服务器：{keyword}")
+    selection = Prompt.ask("请输入要测速的 server id，或输入 auto 自动测试前 3 个", default="auto").strip()
+    interface = get_speedtest_interface_name()
+
+    if selection.lower() == "auto":
+        auto_test_keyword_servers(matches[:3], interface=interface)
+        return
+
+    valid_ids = {str(server.get("id")) for server in matches if server.get("id")}
+    if selection not in valid_ids:
+        console.print("[yellow]输入的 server id 不在当前匹配列表中。[/yellow]")
+        return
+    result = run_speedtest_with_backend("official-ookla-cli", server_id=selection, interface=interface)
+    print_speedtest_result(result)
+    if not result.error and result.server_id and Confirm.ask("是否保存此服务器为默认测速服务器？", default=False):
+        save_result_as_preferred(result, interface)
+
+
+def show_isp_city_preset_speedtest() -> None:
+    """Try keyword presets based on current ISP and city."""
+    info = probe_exit_ip()
+    keywords: list[str] = []
+    org = info.org or ""
+    if "China Mobile" in org or "移动" in org:
+        keywords.extend(["China Mobile", "Mobile", "Guangzhou", "Guangdong", "Shenzhen", "Hong Kong"])
+    if info.city:
+        keywords.append(info.city)
+    if info.region:
+        keywords.append(info.region)
+    keywords.extend(["Guangzhou", "Guangdong", "Hong Kong"])
+
+    servers = list_speedtest_servers()
+    if not servers or servers[0].get("error"):
+        console.print("[yellow]当前后端无法获取服务器列表。建议手动带宽测速或安装官方 Ookla CLI。[/yellow]")
+        return
+
+    seen: set[str] = set()
+    for keyword in keywords:
+        if keyword.lower() in seen:
+            continue
+        seen.add(keyword.lower())
+        matches = filter_servers_by_keyword(servers, keyword, limit=10)
+        if matches:
+            console.print(f"[green]使用关键词预设：{keyword}[/green]")
+            print_server_matches(matches, title=f"预设匹配服务器：{keyword}")
+            auto_test_keyword_servers(matches[:3], interface=get_speedtest_interface_name())
+            return
+
+    console.print("[yellow]未按当前运营商/城市找到候选服务器，请尝试手动输入关键词。[/yellow]")
+
+
+def print_server_matches(servers: list[dict], *, title: str) -> None:
+    """Print keyword-matched server rows."""
+    table = Table(title=title)
+    table.add_column("ID", style="bold cyan")
+    table.add_column("Name")
+    table.add_column("Location")
+    table.add_column("Country")
+    table.add_column("Host")
+    for server in servers:
+        table.add_row(
+            str(server.get("id", "-")),
+            str(server.get("name", "-")),
+            str(server.get("location", "-")),
+            str(server.get("country", "-")),
+            str(server.get("host", "-")),
+        )
+    console.print(table)
+
+
+def auto_test_keyword_servers(servers: list[dict], *, interface: str | None) -> None:
+    """Run selected candidate servers and show the best download result."""
+    best_result: SpeedtestResult | None = None
+    for server in servers:
+        server_id = str(server.get("id", "")).strip()
+        if not server_id:
+            continue
+        console.print(f"[dim]正在测试 server id {server_id}...[/dim]")
+        result = run_speedtest_with_backend("official-ookla-cli", server_id=server_id, interface=interface)
+        if result.error:
+            console.print(f"[yellow]server id {server_id} 测试失败：{result.error}[/yellow]")
+            continue
+        if best_result is None or (result.download_mbps or 0) > (best_result.download_mbps or 0):
+            best_result = result
+
+    if best_result is None:
+        console.print("[yellow]候选服务器测速均失败，请换关键词或换 interface 后重试。[/yellow]")
+        return
+
+    console.print("[green]推荐结果如下：[/green]")
+    print_speedtest_result(best_result)
+
+
+def get_speedtest_interface_name() -> str | None:
+    """Return preferred physical interface name for advanced Ookla tests."""
+    preferred_interface = get_preferred_physical_interface()
+    if not preferred_interface:
+        return None
+    console.print(
+        "[green]使用物理网卡测速："
+        f"{preferred_interface['name']} ({preferred_interface['ip']})[/green]"
+    )
+    return preferred_interface["name"]
+
+
+def save_result_as_preferred(result: SpeedtestResult, interface: str | None = None) -> None:
+    """Save a speedtest result as preferred config."""
+    try:
+        preferred = save_preferred_speedtest(result, interface=interface)
+    except ValueError as exc:
+        console.print(f"[yellow]{exc}[/yellow]")
+        return
+    console.print(
+        "[green]已保存默认测速服务器："
+        f"{preferred.get('server_name') or preferred.get('server_id')} / {preferred.get('location') or '-'}[/green]"
+    )
+
+
+def show_save_last_speedtest_server() -> None:
+    """Save latest successful speedtest server as default."""
+    result = get_last_successful_speedtest_result()
+    if result is None:
+        console.print("[yellow]还没有最近一次成功测速结果。[/yellow]")
+        return
+    if not result.server_id:
+        console.print("[yellow]最近一次测速结果没有 server id，无法保存。[/yellow]")
+        return
+    save_result_as_preferred(result)
+
+
+def show_clear_preferred_speedtest() -> None:
+    """Clear preferred speedtest server config."""
+    existed = clear_preferred_speedtest()
+    if existed:
+        console.print("[green]已清除默认测速服务器。[/green]")
+    else:
+        console.print("[yellow]当前没有默认测速服务器配置。[/yellow]")
+
+
+def show_speedtest_config() -> None:
+    """Display current speedtest config."""
+    preferred = get_preferred_speedtest()
+    console.print(f"[dim]配置文件：{get_config_path()}[/dim]")
+    if not preferred:
+        console.print("[yellow]当前没有默认测速服务器配置。[/yellow]")
+        return
+    table = Table(title="当前测速配置")
+    table.add_column("Field", style="bold cyan")
+    table.add_column("Value")
+    for key in ("backend", "server_id", "server_name", "location", "interface"):
+        table.add_row(key, str(preferred.get(key) or "-"))
+    console.print(table)
+
+
+def show_last_speedtest_raw_summary() -> None:
+    """Display compact raw summary for the latest successful speedtest."""
+    result = get_last_successful_speedtest_result()
+    if result is None:
+        console.print("[yellow]还没有最近一次成功测速结果。[/yellow]")
+        return
+    summary = summarize_speedtest_raw(result)
+    table = Table(title="最近一次测速 raw 摘要")
+    table.add_column("Field", style="bold cyan")
+    table.add_column("Value")
+    for key, value in summary.items():
+        table.add_row(key, value)
+    console.print(table)
+
+
+def show_open_speedtest_cn() -> None:
+    """Open speedtest.cn as a browser reference test."""
+    url = "https://www.speedtest.cn/"
+    console.print(f"[green]正在打开浏览器测速对照：{url}[/green]")
+    console.print("[dim]这是网页对照入口，不调用或逆向 speedtest.cn 私有 API。[/dim]")
+    import webbrowser
+
+    webbrowser.open(url)
 
 
 def show_open_router_admin() -> None:
@@ -485,6 +749,19 @@ def show_speedtest_backend_info() -> None:
     console.print("[bold]测速后端信息[/bold]")
     console.print(f"优先级：{', '.join(info['priority'])}")
     console.print(f"当前可用：{', '.join(info['available']) or '-'}")
+    table = Table(title="后端详情")
+    table.add_column("Backend", style="bold cyan")
+    table.add_column("Available")
+    table.add_column("Binary Path")
+    table.add_column("Version Output")
+    for backend_name, backend_info in info["backends"].items():
+        table.add_row(
+            backend_name,
+            "yes" if backend_info["available"] else "no",
+            backend_info["binary_path"] or "-",
+            (backend_info["version_output"] or "-").splitlines()[0],
+        )
+    console.print(table)
     console.print("官方 Ookla CLI 安装：brew tap teamookla/speedtest && brew install speedtest")
     console.print("Python speedtest-cli 仅作为 fallback，结果可能偏低。")
 
@@ -504,9 +781,16 @@ def build_advanced_menu() -> Panel:
         [
             "[bold cyan]1[/bold cyan]. 列出 Speedtest 服务器",
             "[bold cyan]2[/bold cyan]. 手动指定 Speedtest server id 测速",
-            "[bold cyan]3[/bold cyan]. 显示测速后端信息",
-            "[bold cyan]4[/bold cyan]. 显示 Ookla server selection details",
-            "[bold cyan]5[/bold cyan]. 返回主菜单",
+            "[bold cyan]3[/bold cyan]. 按关键词筛选服务器测速",
+            "[bold cyan]4[/bold cyan]. 按当前运营商/城市优选服务器",
+            "[bold cyan]5[/bold cyan]. 保存最近一次成功测速服务器为默认",
+            "[bold cyan]6[/bold cyan]. 清除默认测速服务器",
+            "[bold cyan]7[/bold cyan]. 查看当前测速配置",
+            "[bold cyan]8[/bold cyan]. 显示最近一次测速 raw 摘要",
+            "[bold cyan]9[/bold cyan]. 打开 speedtest.cn 网页对照测速",
+            "[bold cyan]10[/bold cyan]. 显示测速后端信息",
+            "[bold cyan]11[/bold cyan]. 显示 Ookla server selection details",
+            "[bold cyan]12[/bold cyan]. 返回主菜单",
         ]
     )
     return Panel(menu, title="高级功能", border_style="cyan")
@@ -516,16 +800,34 @@ def show_advanced_menu() -> None:
     """Run advanced menu."""
     while True:
         console.print(build_advanced_menu())
-        choice = Prompt.ask("请选择高级功能", choices=["1", "2", "3", "4", "5"], default="5")
+        choice = Prompt.ask(
+            "请选择高级功能",
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
+            default="12",
+        )
         if choice == "1":
             show_speedtest_servers()
         elif choice == "2":
             show_speedtest_by_server_id()
         elif choice == "3":
-            show_speedtest_backend_info()
+            show_keyword_speedtest()
         elif choice == "4":
-            show_ookla_selection_details()
+            show_isp_city_preset_speedtest()
         elif choice == "5":
+            show_save_last_speedtest_server()
+        elif choice == "6":
+            show_clear_preferred_speedtest()
+        elif choice == "7":
+            show_speedtest_config()
+        elif choice == "8":
+            show_last_speedtest_raw_summary()
+        elif choice == "9":
+            show_open_speedtest_cn()
+        elif choice == "10":
+            show_speedtest_backend_info()
+        elif choice == "11":
+            show_ookla_selection_details()
+        elif choice == "12":
             break
 
 

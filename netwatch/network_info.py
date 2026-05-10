@@ -48,6 +48,8 @@ VIRTUAL_INTERFACE_KEYWORDS = (
     "docker",
     "bridge",
     "utun",
+    "tun",
+    "tap",
     "awdl",
     "llw",
     "lo",
@@ -55,6 +57,8 @@ VIRTUAL_INTERFACE_KEYWORDS = (
     "veth",
     "tailscale",
 )
+
+PREFERRED_PHYSICAL_INTERFACE_NAMES = ("en0", "en1")
 
 
 def get_network_interfaces() -> list[InterfaceInfo]:
@@ -135,6 +139,28 @@ def get_lan_scan_candidates() -> list[NetworkCandidate]:
         )
 
     return sorted(candidates, key=lambda item: (lan_preference_rank(item.ipv4), item.name))
+
+
+def get_preferred_physical_interface() -> dict[str, str] | None:
+    """Return the best real LAN/Wi-Fi interface for direct bandwidth tests."""
+    candidates = get_lan_scan_candidates()
+    if not candidates:
+        return None
+
+    def rank(candidate: NetworkCandidate) -> tuple[int, int, str]:
+        name_rank = (
+            PREFERRED_PHYSICAL_INTERFACE_NAMES.index(candidate.name)
+            if candidate.name in PREFERRED_PHYSICAL_INTERFACE_NAMES
+            else len(PREFERRED_PHYSICAL_INTERFACE_NAMES)
+        )
+        return (lan_preference_rank(candidate.ipv4), name_rank, candidate.name)
+
+    preferred = sorted(candidates, key=rank)[0]
+    return {
+        "name": preferred.name,
+        "ip": preferred.ipv4,
+        "reason": "preferred private LAN interface",
+    }
 
 
 def get_primary_ipv4() -> str | None:

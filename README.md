@@ -7,10 +7,10 @@
 - 查看实时网卡流量：每秒刷新 upload speed 和 download speed，自动显示为 KB/s 或 MB/s。它表示当前网卡实时吞吐量，不代表最大带宽。
 - 查看本机网络信息：显示网卡名称、IPv4 地址和 MAC 地址。
 - 局域网设备发现：支持快速扫描、增强扫描、仅从路由器同步设备列表。
-- 运行带宽测速：主动连接公网测速服务器，显示 ping、download Mbps/MB/s 和 upload Mbps/MB/s。
-- 代理/当前出口测速：显示 CLI 当前公网出口，再使用最佳可用测速后端测速。
+- 运行带宽测速：主动连接公网测速服务器，默认优先使用真实物理网卡，显示 ping、download Mbps/MB/s 和 upload Mbps/MB/s。
+- 代理/当前出口测速：显示 CLI 当前公网出口，再使用最佳可用测速后端测速，不强制指定物理网卡。
 - 打开路由器管理后台：自动识别默认网关，并提供常见品牌后台入口。
-- 高级功能：列出 Speedtest 服务器、手动指定 server id 测速、显示测速后端信息和 Ookla selection details。
+- 高级功能：列出 Speedtest 服务器、手动指定 server id 测速、按关键词筛选服务器、按运营商/城市预设优选服务器、打开 `speedtest.cn` 网页对照、显示测速后端信息和 Ookla selection details。
 - 使用 `rich` 美化命令行输出。
 
 ## 实时网卡流量 vs Speedtest 最大带宽
@@ -32,6 +32,8 @@ brew install speedtest
 
 不要把 `brew install speedtest-cli` 当成官方 Ookla CLI；`speedtest-cli` 是社区版工具，Homebrew 已标记为 deprecated。Python fallback 可通过 `pip install speedtest-cli` 安装。
 
+如果项目虚拟环境里的 `.venv/bin/speedtest` shadow 了 Homebrew 的官方命令，`netwatch-cli` 会优先探测常见官方路径，例如 `/opt/homebrew/bin/speedtest` 和 `/usr/local/bin/speedtest`，并通过 `speedtest --version` 判断是否为 `Speedtest by Ookla`，避免误用 Python 社区版。
+
 `Mbps` 是 megabits per second，常用于运营商宽带标称速度；`MB/s` 是 megabytes per second，更接近日常下载文件时看到的速度。换算规则：
 
 ```text
@@ -39,17 +41,41 @@ Mbps = bit/s / 1_000_000
 MB/s = bit/s / 8 / 1_000_000
 ```
 
-自动测速的服务器选择可能受地理位置、运营商路由、服务器负载影响而波动。如果结果明显异常，可以使用“选择服务器测速”，先列出附近服务器，再手动输入 server id。
+普通“带宽测速”会优先识别真实 LAN/Wi-Fi 网卡，例如 macOS 上的 `en0` / `en1`，并把它传给官方 Ookla CLI 的 `--interface` 参数，尽量避开 `utun`、`tun`、`tap`、`198.18.0.0/15` 等 TUN/VPN 或虚拟出口。如果官方 CLI 不支持该参数或该网卡测速失败，工具会不带 interface 重试，再按后端优先级 fallback。
+
+Ookla 自动选服可能受公网出口、运营商路由、服务器负载和 TUN/VPN 影响。它和 `speedtest.cn` 网页使用的服务器池不一定相同，例如网页能选到“广东移动_Vixtel_1”并不代表 Ookla CLI 一定能选到同一节点。`speedtest.cn` SDK/API 目前不作为默认后端，因为没有公开免费 CLI API；后续可以作为授权后端扩展。
+
+如果结果明显异常，可以进入“高级功能”，用“按关键词筛选服务器测速”，输入 `Guangzhou`、`Guangdong`、`China Mobile`、`Mobile`、`Hong Kong`、`Tokyo`、`IPA` 等关键词筛选 Ookla 服务器，然后手动指定 server id 或让工具自动测试前 3 个候选。找到相对稳定的服务器后，可以保存为默认测速服务器。
+
+## 常用测速服务器配置
+
+V0.8.3 起，`netwatch-cli` 支持把最近一次成功测速的 Ookla server id 保存为默认配置：
+
+```text
+~/.netwatch/config.json
+```
+
+配置只保存非敏感信息，例如 backend、server id、server name、location、interface，不保存密码、token、stok 或公网 IP。普通“带宽测速”检测到默认服务器后会先询问是否使用；如果该服务器测速失败，会自动回退到自动测速。
+
+测速结果展示后会做基础质量诊断。如果出现高 ping、高 jitter、丢包或下载速度明显偏低，会提示“当前测速结果可能不代表真实最大带宽”，并建议尝试指定测速服务器或用浏览器测速对照。
+
+当前推荐做法：
+
+- `official-ookla-cli` 作为默认通用后端。
+- 保存本地实测最快、最稳定的 Ookla server id。
+- 把 `speedtest.cn` 网页作为对照基准。
+- 本项目暂不逆向 `speedtest.cn` 私有网页 API；未来如果有正式 SDK/API 授权，会作为独立后端接入。
 
 ## 代理/当前出口测速
 
-“代理/当前出口测速”会先请求 `https://ipinfo.io/json`，显示当前 CLI 进程看到的公网出口 IP、城市、国家/地区和 ISP/组织，然后调用最佳可用测速后端。
+“代理/当前出口测速”会先请求 `https://ipinfo.io/json`，显示当前 CLI 进程看到的公网出口 IP、城市、国家/地区和 ISP/组织，然后调用最佳可用测速后端。这个功能保留当前进程出口行为，不会强制指定 `en0` / `en1`。
 
 限制：
 
 - TUN/VPN 模式通常会影响 CLI 出口。
 - 浏览器代理通常只影响浏览器，不一定影响 CLI。
 - 本工具只检测当前 CLI 进程实际看到的公网出口，不保存公网 IP。
+- 如果看到 Ookla JSON 中 `interface.name = utun*`、`internalIp = 198.18.*`，说明测速可能走了 TUN/VPN 出口；普通“带宽测速”会尝试避开它，而“代理/当前出口测速”会保留它。
 
 ## 为什么可能需要手动选择网卡
 
@@ -190,6 +216,14 @@ pip install speedtest-cli
 [screenshot placeholder]
 ```
 
+## AI Agent Handoff
+
+本项目可由 Codex / Claude Code 等 coding agent 协作维护。
+
+- 交接文档见 [docs/handoff-to-claude.md](docs/handoff-to-claude.md)。
+- Agent 项目指令见 [AGENTS.md](AGENTS.md)。
+- Claude Code 专用入口见 [CLAUDE.md](CLAUDE.md)。
+
 ## Roadmap
 
 - 增加厂商信息识别，例如基于 MAC OUI 查询 vendor。
@@ -201,6 +235,8 @@ pip install speedtest-cli
 - 支持 Speedtest 结果历史记录。
 - 集成官方 Ookla CLI 安装检测和更丰富的 selection details 展示。
 - 支持更多测速后端和结果对比。
+- 增加授权的 speedtest.cn 或运营商专用测速后端扩展。
+- 增强 Ookla 服务器关键词筛选和多服务器自动对比策略。
 
 更多 V0.2 修复记录见 [docs/v0.2-plan.md](docs/v0.2-plan.md)。
 更多 V0.3 修复记录见 [docs/v0.3-plan.md](docs/v0.3-plan.md)。
@@ -208,6 +244,8 @@ pip install speedtest-cli
 更多 V0.6 修复记录见 [docs/v0.6-plan.md](docs/v0.6-plan.md)。
 更多 V0.7 修复记录见 [docs/v0.7-plan.md](docs/v0.7-plan.md)。
 更多 V0.8 修复记录见 [docs/v0.8-plan.md](docs/v0.8-plan.md)。
+更多 V0.8.2 修复记录见 [docs/v0.8.2-plan.md](docs/v0.8.2-plan.md)。
+更多 V0.8.3 修复记录见 [docs/v0.8.3-plan.md](docs/v0.8.3-plan.md)。
 
 ## 为什么部分设备无法显示主机名
 

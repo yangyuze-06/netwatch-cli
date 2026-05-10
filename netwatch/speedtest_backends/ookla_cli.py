@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+from dataclasses import dataclass
 from typing import Any
 
 from netwatch.speedtest_backends.models import SpeedtestResult
@@ -16,30 +18,79 @@ INSTALL_HINT = (
     "brew tap teamookla/speedtest\n"
     "brew install speedtest"
 )
+OOKLA_CANDIDATE_PATHS = (
+    "/opt/homebrew/bin/speedtest",
+    "/usr/local/bin/speedtest",
+    "/usr/bin/speedtest",
+)
+
+
+@dataclass(frozen=True)
+class OoklaBinaryInfo:
+    """Detected official Ookla CLI binary info."""
+
+    path: str
+    version_output: str
 
 
 def is_available() -> bool:
     """Return True if official speedtest command is available."""
-    if shutil.which("speedtest") is None:
-        return False
+    return find_ookla_speedtest_binary() is not None
+
+
+def find_ookla_speedtest_binary() -> OoklaBinaryInfo | None:
+    """Find the official Ookla speedtest binary, avoiding Python speedtest-cli shadows."""
+    seen: set[str] = set()
+    candidates = list(OOKLA_CANDIDATE_PATHS)
+    path_candidate = shutil.which("speedtest")
+    if path_candidate:
+        candidates.append(path_candidate)
+
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if not os.path.exists(candidate):
+            continue
+        version_output = get_version_output(candidate)
+        if is_official_ookla_version(version_output):
+            return OoklaBinaryInfo(path=candidate, version_output=version_output)
+    return None
+
+
+def get_version_output(binary_path: str) -> str:
+    """Return speedtest --version output for a candidate binary."""
     try:
-        completed = subprocess.run(["speedtest", "--version"], capture_output=True, text=True, timeout=5, check=False)
+        completed = subprocess.run([binary_path, "--version"], capture_output=True, text=True, timeout=5, check=False)
     except (OSError, subprocess.TimeoutExpired):
-        return False
-    output = f"{completed.stdout}\n{completed.stderr}".lower()
-    if "speedtest-cli" in output:
-        return False
-    return "ookla" in output or completed.returncode == 0
+        return ""
+    return f"{completed.stdout}\n{completed.stderr}".strip()
 
 
-def run_speedtest(server_id: str | None = None, selection_details: bool = False) -> SpeedtestResult:
+def is_official_ookla_version(version_output: str) -> bool:
+    """Return True for official Ookla CLI version output."""
+    normalized = version_output.lower()
+    if "speedtest-cli" in normalized or "sivel" in normalized:
+        return False
+    return "ookla" in normalized or "speedtest by ookla" in normalized
+
+
+def run_speedtest(
+    server_id: str | None = None,
+    selection_details: bool = False,
+    interface: str | None = None,
+) -> SpeedtestResult:
     """Run official Ookla CLI speedtest and parse JSON output."""
-    if not is_available():
+    binary = find_ookla_speedtest_binary()
+    if binary is None:
         return SpeedtestResult(backend=BACKEND_NAME, error=INSTALL_HINT)
 
-    command = ["speedtest", "--format=json", "--accept-license", "--accept-gdpr"]
+    command = [binary.path]
     if server_id:
         command.extend(["--server-id", server_id])
+    if interface:
+        command.extend(["--interface", interface])
+    command.extend(["--format=json", "--accept-license", "--accept-gdpr"])
     if selection_details:
         command.append("--selection-details")
 
@@ -50,6 +101,9 @@ def run_speedtest(server_id: str | None = None, selection_details: bool = False)
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
+        friendly_error = friendly_ookla_error(completed.stdout)
+        if friendly_error:
+            return SpeedtestResult(backend=BACKEND_NAME, raw=completed.stdout, error=friendly_error)
         return SpeedtestResult(backend=BACKEND_NAME, raw=completed.stdout, error=f"无法解析 Ookla CLI JSON：{exc}")
 
     return parse_ookla_result(payload)
@@ -57,10 +111,11 @@ def run_speedtest(server_id: str | None = None, selection_details: bool = False)
 
 def list_servers() -> list[dict]:
     """List available Ookla servers when supported by the installed CLI."""
-    if not is_available():
+    binary = find_ookla_speedtest_binary()
+    if binary is None:
         return [{"error": INSTALL_HINT}]
 
-    completed = run_command(["speedtest", "--servers", "--format=json", "--accept-license", "--accept-gdpr"])
+    completed = run_command([binary.path, "--servers", "--format=json", "--accept-license", "--accept-gdpr"])
     if isinstance(completed, SpeedtestResult):
         return [{"error": completed.error or "无法获取服务器列表。"}]
 
@@ -80,10 +135,11 @@ def list_servers() -> list[dict]:
 
 def get_selection_details() -> str | dict | None:
     """Return Ookla server selection details when supported."""
-    if not is_available():
+    binary = find_ookla_speedtest_binary()
+    if binary is None:
         return INSTALL_HINT
 
-    completed = run_command(["speedtest", "--selection-details", "--format=json", "--accept-license", "--accept-gdpr"])
+    completed = run_command([binary.path, "--selection-details", "--format=json", "--accept-license", "--accept-gdpr"])
     if isinstance(completed, SpeedtestResult):
         return completed.error
     try:
@@ -102,7 +158,7 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess[str] | Speedt
         return SpeedtestResult(backend=BACKEND_NAME, error="Ookla CLI 测速超时。")
     except subprocess.CalledProcessError as exc:
         message = exc.stderr or exc.stdout or str(exc)
-        return SpeedtestResult(backend=BACKEND_NAME, raw=message, error=message.strip())
+        return SpeedtestResult(backend=BACKEND_NAME, raw=message, error=friendly_ookla_error(message) or message.strip())
     except Exception as exc:
         return SpeedtestResult(backend=BACKEND_NAME, error=str(exc))
     return completed
@@ -110,6 +166,14 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess[str] | Speedt
 
 def parse_ookla_result(payload: dict[str, Any]) -> SpeedtestResult:
     """Parse official Ookla CLI JSON result."""
+    payload_error = payload.get("error")
+    if payload_error:
+        return SpeedtestResult(
+            backend=BACKEND_NAME,
+            raw=payload,
+            error=friendly_ookla_error(str(payload_error)) or str(payload_error),
+        )
+
     download_bandwidth = optional_float(payload.get("download", {}).get("bandwidth"))
     upload_bandwidth = optional_float(payload.get("upload", {}).get("bandwidth"))
     server = payload.get("server") or {}
@@ -150,3 +214,10 @@ def optional_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def friendly_ookla_error(message: str) -> str | None:
+    """Return a user-facing Ookla CLI error without raw JSON noise."""
+    if "cannot read from socket" in message.lower():
+        return "Official Ookla CLI is installed but this test failed.\nError: Cannot read from socket."
+    return None
