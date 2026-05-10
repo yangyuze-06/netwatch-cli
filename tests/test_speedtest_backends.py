@@ -289,3 +289,142 @@ def test_configured_speedtest_fallbacks_when_preferred_fails(monkeypatch) -> Non
     assert result.server_id == "auto"
     assert calls[0] == ("official-ookla-cli", "bad", "en0")
     assert calls[1] == ("official-ookla-cli", None, "en0")
+
+
+# --- Patch 1: ISP preset keywords ---
+
+
+def test_isp_preset_china_mobile_excludes_hong_kong_from_priority() -> None:
+    """Hong Kong must not appear in China Mobile priority keywords."""
+    keywords = speedtest_runner.build_isp_preset_keywords(
+        org="China Mobile", city="", region=""
+    )
+    # Priority segment (before fallback) must not include Hong Kong
+    priority_segment = keywords[:5]
+    assert "Hong Kong" not in priority_segment
+    # Hong Kong must only appear at the very end
+    assert keywords[-1] == "Hong Kong"
+
+
+def test_isp_preset_guangzhou_city_has_top_priority() -> None:
+    """When city is Guangzhou, it should be first keyword."""
+    keywords = speedtest_runner.build_isp_preset_keywords(
+        org="China Mobile", city="Guangzhou", region="Guangdong"
+    )
+    assert keywords[0] == "Guangzhou"
+    assert keywords[1] == "Guangdong"
+    assert "China Mobile" in keywords[:5]
+    assert keywords[-1] == "Hong Kong"
+
+
+def test_isp_preset_guangdong_region_has_top_priority() -> None:
+    """When region is Guangdong, it should place Guangzhou/Guangdong first."""
+    keywords = speedtest_runner.build_isp_preset_keywords(
+        org="China Mobile", city="Shenzhen", region="Guangdong"
+    )
+    assert keywords[0] == "Guangzhou"
+    assert keywords[1] == "Guangdong"
+    assert keywords[-1] == "Hong Kong"
+
+
+def test_isp_preset_non_china_mobile_no_hong_kong_priority() -> None:
+    """Non-China-Mobile ISPs should not get Hong Kong in priority segment."""
+    keywords = speedtest_runner.build_isp_preset_keywords(
+        org="China Telecom", city="Shanghai", region="Shanghai"
+    )
+    # Hong Kong is still present but only as final fallback
+    assert keywords[-1] == "Hong Kong"
+    # No China Mobile specific keywords
+    assert "China Mobile" not in keywords
+
+
+def test_isp_preset_hong_kong_not_duplicated() -> None:
+    """Hong Kong must appear exactly once in the keyword list."""
+    keywords = speedtest_runner.build_isp_preset_keywords(
+        org="China Mobile", city="Hong Kong", region="Hong Kong"
+    )
+    assert keywords.count("Hong Kong") == 1
+
+
+def test_isp_preset_deduplicates_case_insensitive() -> None:
+    """Keywords differing only in case should be deduplicated."""
+    keywords = speedtest_runner.build_isp_preset_keywords(
+        org="China Mobile", city="guangzhou", region="guangdong"
+    )
+    lower_keywords = [kw.lower() for kw in keywords]
+    assert len(lower_keywords) == len(set(lower_keywords))
+
+
+# --- Patch 3: quality diagnosis ---
+
+
+def test_quality_details_high_ping_triggers_distance_advice() -> None:
+    """High ping should trigger server distance / rerouting advice."""
+    result = SpeedtestResult(backend="official-ookla-cli", ping_ms=120)
+    details = speedtest_runner.get_speedtest_quality_details(result)
+    assert any("ping > 80ms" == d["condition"] for d in details)
+    ping_detail = next(d for d in details if d["condition"] == "ping > 80ms")
+    assert any("距离过远" in line for line in ping_detail["advice"])
+
+
+def test_quality_details_low_download_triggers_speedtest_cn_reference() -> None:
+    """Low download should reference speedtest.cn and server id save advice."""
+    result = SpeedtestResult(backend="official-ookla-cli", download_mbps=12)
+    details = speedtest_runner.get_speedtest_quality_details(result)
+    assert any("download < 50 Mbps" == d["condition"] for d in details)
+    download_detail = next(d for d in details if d["condition"] == "download < 50 Mbps")
+    combined = " ".join(download_detail["advice"])
+    assert "speedtest.cn" in combined
+    assert "指定 server id" in combined
+
+
+def test_quality_details_utun_interface_triggers_vpn_warning() -> None:
+    """utun interface in raw data should trigger TUN/VPN warning."""
+    result = SpeedtestResult(
+        backend="official-ookla-cli",
+        raw={"interface": {"name": "utun8", "internalIp": "198.18.0.1"}},
+    )
+    details = speedtest_runner.get_speedtest_quality_details(result)
+    assert any("utun8" in d["condition"] for d in details)
+    vpn_detail = next(d for d in details if "utun8" in d["condition"])
+    assert any("TUN/VPN" in line for line in vpn_detail["advice"])
+
+
+def test_quality_details_198_18_ip_triggers_vpn_warning() -> None:
+    """198.18.x.x internal IP should trigger TUN/VPN warning."""
+    result = SpeedtestResult(
+        backend="official-ookla-cli",
+        raw={"interface": {"name": "en0", "internalIp": "198.18.0.1"}},
+    )
+    details = speedtest_runner.get_speedtest_quality_details(result)
+    assert any("198.18.0.1" in d["condition"] for d in details)
+    vpn_detail = next(d for d in details if "198.18.0.1" in d["condition"])
+    assert any("TUN/VPN" in line for line in vpn_detail["advice"])
+
+
+def test_quality_details_normal_en0_no_vpn_warning() -> None:
+    """Normal en0 with 192.168.x.x should NOT trigger TUN/VPN warning."""
+    result = SpeedtestResult(
+        backend="official-ookla-cli",
+        raw={"interface": {"name": "en0", "internalIp": "192.168.31.75"}},
+    )
+    details = speedtest_runner.get_speedtest_quality_details(result)
+    assert not any("en0" in d.get("condition", "") for d in details)
+
+
+def test_quality_details_jitter_triggers_stability_advice() -> None:
+    """High jitter should trigger stability advice."""
+    result = SpeedtestResult(backend="official-ookla-cli", jitter_ms=45)
+    details = speedtest_runner.get_speedtest_quality_details(result)
+    assert any("jitter > 30ms" == d["condition"] for d in details)
+    jitter_detail = next(d for d in details if d["condition"] == "jitter > 30ms")
+    assert any("不稳定" in line for line in jitter_detail["advice"])
+
+
+def test_quality_details_packet_loss_triggers_wifi_check() -> None:
+    """Packet loss should suggest checking Wi-Fi/router/VPN."""
+    result = SpeedtestResult(backend="official-ookla-cli", packet_loss=2.5)
+    details = speedtest_runner.get_speedtest_quality_details(result)
+    assert any("packet loss > 1%" == d["condition"] for d in details)
+    loss_detail = next(d for d in details if d["condition"] == "packet loss > 1%")
+    assert any("Wi-Fi" in line for line in loss_detail["advice"])

@@ -130,6 +130,48 @@ def filter_servers_by_keyword(servers: list[dict], keyword: str, limit: int | No
     return matches
 
 
+def build_isp_preset_keywords(org: str = "", city: str = "", region: str = "") -> list[str]:
+    """Build priority keywords for ISP/city-based server selection.
+
+    Returns deduplicated keywords in priority order. Hong Kong is only
+    a fallback candidate and may not be optimal for mainland China Mobile lines.
+    """
+    keywords: list[str] = []
+    org = org or ""
+    city = city or ""
+    region = region or ""
+
+    is_china_mobile = "China Mobile" in org or "移动" in org
+    is_guangzhou = "Guangzhou" in city
+    is_guangdong = "Guangdong" in region
+
+    if is_china_mobile:
+        if is_guangzhou or is_guangdong:
+            keywords.extend(["Guangzhou", "Guangdong", "China Mobile", "Mobile", "Shenzhen"])
+        else:
+            keywords.extend(["China Mobile", "Mobile", "Guangzhou", "Guangdong", "Shenzhen"])
+
+    if city:
+        keywords.append(city)
+    if region:
+        keywords.append(region)
+
+    for kw in ["Guangzhou", "Guangdong"]:
+        if kw not in keywords:
+            keywords.append(kw)
+
+    # Hong Kong is only a last-resort fallback
+    keywords.append("Hong Kong")
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for kw in keywords:
+        if kw.lower() not in seen:
+            seen.add(kw.lower())
+            result.append(kw)
+    return result
+
+
 def get_speedtest_quality_warnings(result: SpeedtestResult) -> list[str]:
     """Return human-readable quality warning reasons for suspicious speedtest results."""
     reasons: list[str] = []
@@ -142,6 +184,70 @@ def get_speedtest_quality_warnings(result: SpeedtestResult) -> list[str]:
     if result.download_mbps is not None and result.download_mbps < 50:
         reasons.append("download < 50 Mbps")
     return reasons
+
+
+def get_speedtest_quality_details(result: SpeedtestResult) -> list[dict]:
+    """Return specific quality warnings with actionable advice."""
+    details: list[dict] = []
+
+    if result.ping_ms is not None and result.ping_ms > 80:
+        details.append({
+            "condition": "ping > 80ms",
+            "advice": [
+                "测速服务器延迟较高，可能距离过远或线路绕路。",
+                "建议使用高级功能 → 按关键词筛选服务器测速，优先尝试 Guangzhou / Guangdong / China Mobile / Shenzhen。",
+                "如果已有稳定 server id，建议保存为默认测速服务器。",
+            ],
+        })
+
+    if result.jitter_ms is not None and result.jitter_ms > 30:
+        details.append({
+            "condition": "jitter > 30ms",
+            "advice": [
+                "网络抖动较高，测速结果可能不稳定。",
+                "建议关闭大流量下载/代理切换后重试，或更换测速服务器。",
+            ],
+        })
+
+    if result.packet_loss is not None and result.packet_loss > 1:
+        details.append({
+            "condition": "packet loss > 1%",
+            "advice": [
+                "存在丢包，测速结果可能明显偏低。",
+                "建议检查 Wi-Fi 信号、路由器负载、代理/TUN/VPN 状态。",
+            ],
+        })
+
+    if result.download_mbps is not None and result.download_mbps < 50:
+        details.append({
+            "condition": "download < 50 Mbps",
+            "advice": [
+                "下载结果明显偏低，可能是服务器带宽不足、Ookla 自动选服不适合当前运营商，或当前走了代理/TUN。",
+                "建议：",
+                "  a. 使用 speedtest.cn 网页对照测速。",
+                "  b. 使用高级功能 → 指定 server id 测速并保存。",
+                "  c. 使用高级功能 → 按关键词筛选服务器测速。",
+            ],
+        })
+
+    raw = result.raw
+    if isinstance(raw, dict):
+        interface = raw.get("interface")
+        if isinstance(interface, dict):
+            name = str(interface.get("name") or "").lower()
+            internal_ip = str(interface.get("internalIp") or "")
+            is_virtual_iface = any(kw in name for kw in ("utun", "tun", "tap"))
+            is_virtual_ip = internal_ip.startswith("198.18.")
+            if is_virtual_iface or is_virtual_ip:
+                details.append({
+                    "condition": f"interface={interface.get('name')}, internalIp={interface.get('internalIp')}",
+                    "advice": [
+                        "当前测速可能经过 TUN/VPN/代理虚拟网卡。",
+                        "普通带宽测速建议使用物理网卡 en0；代理/当前出口测速才使用当前 CLI 出口。",
+                    ],
+                })
+
+    return details
 
 
 def summarize_speedtest_raw(result: SpeedtestResult) -> dict[str, str]:

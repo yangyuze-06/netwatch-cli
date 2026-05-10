@@ -373,18 +373,15 @@ def print_speedtest_result(result: SpeedtestResult) -> None:
 
 
 def print_speedtest_quality_warning(result: SpeedtestResult) -> None:
-    """Print speedtest quality warning when result looks suspicious."""
-    reasons = get_speedtest_quality_warnings(result)
-    if not reasons:
+    """Print speedtest quality warning with cause-specific actionable advice."""
+    details = get_speedtest_quality_details(result)
+    if not details:
         return
     console.print("[yellow]当前测速结果可能不代表真实最大带宽。[/yellow]")
-    console.print("[yellow]可能原因：[/yellow]")
-    console.print("[yellow]1. 测速服务器距离过远或线路不佳。[/yellow]")
-    console.print("[yellow]2. Ookla 自动选服不适合当前运营商。[/yellow]")
-    console.print("[yellow]3. 当前网络经过代理/TUN/VPN。[/yellow]")
-    console.print("[yellow]4. 建议尝试高级功能中的“指定测速服务器”或使用浏览器测速对照。[/yellow]")
-    console.print(f"[dim]触发条件：{', '.join(reasons)}[/dim]")
-
+    for detail in details:
+        console.print(f"\n[yellow]触发条件：{detail['condition']}[/yellow]")
+        for line in detail["advice"]:
+            console.print(f"[yellow]→ {line}[/yellow]")
 
 def format_optional_ms(value: float | None) -> str:
     """Format optional milliseconds."""
@@ -468,26 +465,23 @@ def run_keyword_speedtest(keyword: str) -> None:
 def show_isp_city_preset_speedtest() -> None:
     """Try keyword presets based on current ISP and city."""
     info = probe_exit_ip()
-    keywords: list[str] = []
-    org = info.org or ""
-    if "China Mobile" in org or "移动" in org:
-        keywords.extend(["China Mobile", "Mobile", "Guangzhou", "Guangdong", "Shenzhen", "Hong Kong"])
-    if info.city:
-        keywords.append(info.city)
-    if info.region:
-        keywords.append(info.region)
-    keywords.extend(["Guangzhou", "Guangdong", "Hong Kong"])
+    keywords = build_isp_preset_keywords(
+        org=info.org or "",
+        city=info.city or "",
+        region=info.region or "",
+    )
 
     servers = list_speedtest_servers()
     if not servers or servers[0].get("error"):
         console.print("[yellow]当前后端无法获取服务器列表。建议手动带宽测速或安装官方 Ookla CLI。[/yellow]")
         return
 
-    seen: set[str] = set()
     for keyword in keywords:
-        if keyword.lower() in seen:
-            continue
-        seen.add(keyword.lower())
+        if keyword.lower() == "hong kong":
+            console.print(
+                "[dim]Hong Kong is only a fallback candidate and may not be optimal "
+                "for mainland China Mobile lines.[/dim]"
+            )
         matches = filter_servers_by_keyword(servers, keyword, limit=10)
         if matches:
             console.print(f"[green]使用关键词预设：{keyword}[/green]")
@@ -496,7 +490,6 @@ def show_isp_city_preset_speedtest() -> None:
             return
 
     console.print("[yellow]未按当前运营商/城市找到候选服务器，请尝试手动输入关键词。[/yellow]")
-
 
 def print_server_matches(servers: list[dict], *, title: str) -> None:
     """Print keyword-matched server rows."""
