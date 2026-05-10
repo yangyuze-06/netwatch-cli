@@ -9,7 +9,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-from netwatch.network_info import get_primary_ipv4
+from netwatch.network_info import get_lan_scan_candidates
 
 
 @dataclass(frozen=True)
@@ -23,10 +23,13 @@ class HostScanResult:
 
 def infer_local_network(ip_address: str | None = None) -> ipaddress.IPv4Network | None:
     """Infer a /24 network from the primary local IPv4 address."""
-    local_ip = ip_address or get_primary_ipv4()
-    if not local_ip:
+    if ip_address:
+        return ipaddress.ip_network(f"{ip_address}/24", strict=False)
+
+    candidates = get_lan_scan_candidates()
+    if not candidates:
         return None
-    return ipaddress.ip_network(f"{local_ip}/24", strict=False)
+    return candidates[0].network
 
 
 def ping_host(ip_address: str, timeout_seconds: int = 1) -> bool:

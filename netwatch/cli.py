@@ -5,11 +5,15 @@ from __future__ import annotations
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
-from netwatch.network_info import get_network_interfaces, get_primary_ipv4
-from netwatch.scanner import infer_local_network, scan_network
+from netwatch.network_info import (
+    NetworkCandidate,
+    get_display_network_interfaces,
+    get_lan_scan_candidates,
+)
+from netwatch.scanner import scan_network
 from netwatch.speed import format_speed, sample_network_speed
 from netwatch.speedtest_runner import (
     SpeedtestRunError,
@@ -58,7 +62,7 @@ def show_realtime_traffic() -> None:
 
 def show_network_info() -> None:
     """Display local network interface information."""
-    interfaces = get_network_interfaces()
+    interfaces = get_display_network_interfaces()
     table = Table(title="本机网络信息")
     table.add_column("网卡名称", style="bold cyan")
     table.add_column("IPv4 地址")
@@ -76,13 +80,19 @@ def show_network_info() -> None:
 
 def show_lan_scan() -> None:
     """Scan the inferred /24 local network and show online hosts."""
-    local_ip = get_primary_ipv4()
-    network = infer_local_network(local_ip)
-    if network is None:
-        console.print("[red]无法推测本机局域网网段。[/red]")
+    candidate = choose_lan_scan_candidate()
+    if candidate is None:
         return
 
-    console.print(f"[dim]本机 IP: {local_ip}，扫描网段: {network}[/dim]")
+    network = candidate.network
+    console.print(f"[bold]当前选择的网卡名称：[/bold]{candidate.name}")
+    console.print(f"[bold]当前 IP：[/bold]{candidate.ipv4}")
+    console.print(f"[bold]推测扫描网段：[/bold]{network}")
+
+    if not Confirm.ask("是否继续扫描？", default=False):
+        console.print("[yellow]已取消局域网扫描。[/yellow]")
+        return
+
     with console.status("[bold green]正在 ping 扫描局域网在线设备...[/bold green]"):
         results = scan_network(network)
 
@@ -96,16 +106,42 @@ def show_lan_scan() -> None:
 
     if results:
         console.print(table)
+        console.print(f"[green]Found {len(results)} online devices.[/green]")
     else:
         console.print("[yellow]未发现在线主机，或当前环境禁用了 ping 响应。[/yellow]")
+        console.print("[yellow]Found 0 online devices.[/yellow]")
+
+
+def choose_lan_scan_candidate() -> NetworkCandidate | None:
+    """Let the user choose a safe LAN scan candidate when needed."""
+    candidates = get_lan_scan_candidates()
+    if not candidates:
+        console.print("[red]未找到可用于局域网扫描的真实网卡。[/red]")
+        console.print("[dim]已排除 loopback、链路本地、198.18.0.0/15 和常见虚拟网卡。[/dim]")
+        return None
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    table = Table(title="请选择用于局域网扫描的网卡")
+    table.add_column("#", justify="right")
+    table.add_column("网卡名称", style="bold cyan")
+    table.add_column("IPv4 地址")
+    table.add_column("推测网段")
+
+    for index, candidate in enumerate(candidates, start=1):
+        table.add_row(str(index), candidate.name, candidate.ipv4, str(candidate.network))
+
+    console.print(table)
+    choice = IntPrompt.ask("请输入网卡编号", choices=[str(i) for i in range(1, len(candidates) + 1)])
+    return candidates[choice - 1]
 
 
 def show_speedtest() -> None:
     """Run an internet bandwidth test using speedtest-cli."""
     console.print("[dim]Speedtest 测速会连接公网测速服务器，可能需要几十秒。[/dim]")
     try:
-        with console.status("[bold green]正在运行 Speedtest 测速...[/bold green]"):
-            result = run_speedtest()
+        result = run_speedtest(lambda message: console.print(f"[cyan]{message}[/cyan]"))
     except SpeedtestUnavailableError:
         console.print("[yellow]未安装 speedtest-cli，请先执行：[/yellow]")
         console.print("[bold]pip install speedtest-cli[/bold]")
