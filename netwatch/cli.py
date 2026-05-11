@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
+from netwatch.analysis import analyze_speedtest_consistency, build_network_path_summary, get_result_confidence
 from netwatch.config import (
     clear_preferred_librespeed,
     clear_preferred_speedtest,
@@ -59,6 +62,13 @@ from netwatch.speedtest_runner import (
 console = Console()
 LAST_SCAN_DEVICES: list[NetworkDevice] = []
 LAST_ROUTER_DEVICES: list[RouterDevice] = []
+SPEEDTEST_STATUS_MESSAGES = (
+    "正在启动测速后端...",
+    "正在连接测速服务器...",
+    "正在执行下载测速...",
+    "正在执行上传测速...",
+    "测速可能需要 10~30 秒...",
+)
 
 
 def build_menu() -> Panel:
@@ -152,8 +162,12 @@ def run_lan_scan() -> list[NetworkDevice] | None:
 def show_lan_discovery_menu() -> None:
     """Run LAN device discovery submenu."""
     while True:
-        console.print(build_lan_discovery_menu())
-        choice = Prompt.ask("请选择局域网设备发现功能", choices=["1", "2", "3", "4"], default="1")
+        try:
+            console.print(build_lan_discovery_menu())
+            choice = Prompt.ask("请选择局域网设备发现功能", choices=["1", "2", "3", "4"], default="1")
+        except KeyboardInterrupt:
+            console.print("\n[yellow]已返回主菜单。[/yellow]")
+            break
         if choice == "1":
             run_lan_scan()
         elif choice == "2":
@@ -247,7 +261,9 @@ def show_auto_speedtest() -> None:
         )
         console.print(f"[green]检测到常用测速服务器：{server_label or preferred.get('server_id')}[/green]")
         if Confirm.ask("是否使用？", default=True):
-            result = run_configured_speedtest(preferred, fallback=True)
+            result = run_speedtest_with_status(lambda: run_configured_speedtest(preferred, fallback=True))
+            if result is None:
+                return
             print_speedtest_result(result)
             return
 
@@ -259,7 +275,9 @@ def show_auto_speedtest() -> None:
         )
     else:
         console.print("[yellow]未识别到真实物理网卡，将使用当前 CLI 默认出口测速。[/yellow]")
-    result = run_best_speedtest(use_interface=True)
+    result = run_speedtest_with_status(lambda: run_best_speedtest(use_interface=True))
+    if result is None:
+        return
     print_speedtest_result(result)
 
 
@@ -271,11 +289,13 @@ def show_speedtest_by_server_id() -> None:
         return
     use_interface = Confirm.ask("是否使用物理网卡测速？", default=True)
     result, interface = run_speedtest_with_server_id(server_id, use_interface=use_interface)
+    if result is None:
+        return
     if not result.error and result.server_id and Confirm.ask("是否保存此服务器为默认测速服务器？", default=False):
         save_result_as_preferred(result, interface)
 
 
-def run_speedtest_with_server_id(server_id: str, use_interface: bool = True) -> tuple[SpeedtestResult, str | None]:
+def run_speedtest_with_server_id(server_id: str, use_interface: bool = True) -> tuple[SpeedtestResult | None, str | None]:
     """Run Speedtest against a selected server id."""
     backend = "official-ookla-cli" if "official-ookla-cli" in get_available_backends() else "python-speedtest-cli"
     interface = None
@@ -284,9 +304,23 @@ def run_speedtest_with_server_id(server_id: str, use_interface: bool = True) -> 
         if preferred_interface:
             interface = preferred_interface["name"]
             console.print(f"[green]使用物理网卡测速：{interface} ({preferred_interface['ip']})[/green]")
-    result = run_speedtest_with_backend(backend, server_id=server_id, interface=interface)
+    result = run_speedtest_with_status(lambda: run_speedtest_with_backend(backend, server_id=server_id, interface=interface))
+    if result is None:
+        return None, interface
     print_speedtest_result(result)
     return result, interface
+
+
+def run_speedtest_with_status(task) -> SpeedtestResult | None:
+    """Run a speedtest task with user-facing progress and Ctrl+C cancellation."""
+    for message in SPEEDTEST_STATUS_MESSAGES:
+        console.print(f"[dim]{message}[/dim]")
+    try:
+        with console.status("[bold green]测速进行中...[/bold green]"):
+            return task()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已取消当前测速，返回菜单。[/yellow]")
+        return None
 
 
 def print_speedtest_result(result: SpeedtestResult) -> None:
@@ -323,6 +357,7 @@ def print_speedtest_result(result: SpeedtestResult) -> None:
     if result.backend == "python-speedtest-cli":
         console.print("[yellow]当前使用 Python speedtest-cli fallback，结果可能低于网页测速或官方 Ookla CLI。[/yellow]")
     print_speedtest_quality_warning(result)
+    print_speedtest_path_analysis(result)
 
 
 def print_speedtest_quality_warning(result: SpeedtestResult) -> None:
@@ -335,6 +370,32 @@ def print_speedtest_quality_warning(result: SpeedtestResult) -> None:
         console.print(f"\n[yellow]触发条件：{detail['condition']}[/yellow]")
         for line in detail["advice"]:
             console.print(f"[yellow]→ {line}[/yellow]")
+
+
+def print_speedtest_path_analysis(result: SpeedtestResult) -> None:
+    """Print speedtest confidence and network path analysis."""
+    confidence, reasons = get_result_confidence(result)
+    console.print(f"[bold]Result confidence:[/bold] {confidence}")
+    for reason in reasons:
+        console.print(f"[dim]- {reason}[/dim]")
+
+    summary = build_network_path_summary(result)
+    console.print("[bold]网络路径分析：[/bold]")
+    console.print(f"- 当前出口：{summary['current_exit']}")
+    console.print(f"- 测速节点：{summary['speedtest_server']}")
+    console.print(f"- VPN/TUN：{summary['vpn_tun']}")
+    console.print(f"- 高延迟绕路：{summary['high_latency_route']}")
+    console.print(f"- 指标矛盾：{summary['metric_contradiction']}")
+    console.print(f"- 当前结果更可能代表：{summary['likely_represents']}")
+    if summary["not_necessarily"] != "-":
+        console.print(f"- 而不一定代表：{summary['not_necessarily']}")
+
+    messages = analyze_speedtest_consistency(result)
+    if messages:
+        console.print("[yellow]当前测速结果可能受到服务器池、网络路径、VPN/TUN、国际出口、测速实现差异影响。[/yellow]")
+        for message in messages:
+            console.print(f"[yellow]→ {message}[/yellow]")
+
 
 def format_optional_ms(value: float | None) -> str:
     """Format optional milliseconds."""
@@ -370,7 +431,9 @@ def show_proxy_exit_speedtest() -> None:
     console.print("[dim]如果只是浏览器代理，CLI 可能仍然直连。[/dim]")
     console.print("[dim]本功能只检测当前 CLI 进程实际看到的公网出口。[/dim]")
     console.print("[dim]代理/当前出口测速不会强制指定 en0/en1，会按当前 CLI 进程实际出口测速。[/dim]")
-    result = run_best_speedtest(use_interface=False)
+    result = run_speedtest_with_status(lambda: run_best_speedtest(use_interface=False))
+    if result is None:
+        return
     print_speedtest_result(result)
 
 
@@ -409,7 +472,9 @@ def run_keyword_speedtest(keyword: str) -> None:
     if selection not in valid_ids:
         console.print("[yellow]输入的 server id 不在当前匹配列表中。[/yellow]")
         return
-    result = run_speedtest_with_backend("official-ookla-cli", server_id=selection, interface=interface)
+    result = run_speedtest_with_status(lambda: run_speedtest_with_backend("official-ookla-cli", server_id=selection, interface=interface))
+    if result is None:
+        return
     print_speedtest_result(result)
     if not result.error and result.server_id and Confirm.ask("是否保存此服务器为默认测速服务器？", default=False):
         save_result_as_preferred(result, interface)
@@ -471,7 +536,9 @@ def auto_test_keyword_servers(servers: list[dict], *, interface: str | None) -> 
         if not server_id:
             continue
         console.print(f"[dim]正在测试 server id {server_id}...[/dim]")
-        result = run_speedtest_with_backend("official-ookla-cli", server_id=server_id, interface=interface)
+        result = run_speedtest_with_status(lambda server_id=server_id: run_speedtest_with_backend("official-ookla-cli", server_id=server_id, interface=interface))
+        if result is None:
+            return
         if result.error:
             console.print(f"[yellow]server id {server_id} 测试失败：{result.error}[/yellow]")
             continue
@@ -591,21 +658,25 @@ def build_librespeed_menu() -> Panel:
 def show_librespeed_custom_menu() -> None:
     """Run LibreSpeed custom server list submenu."""
     while True:
-        console.print(build_librespeed_menu())
-        console.print("[yellow]公共 LibreSpeed 节点质量不保证。[/yellow]")
-        console.print("[dim]测速结果取决于 server list 中的服务器质量，不承诺跑满千兆。[/dim]")
-        choice = Prompt.ask("请选择 LibreSpeed 功能", choices=["1", "2", "3", "4", "5", "6"], default="6")
-        if choice == "1":
-            show_librespeed_preferred_speedtest()
-        elif choice == "2":
-            show_librespeed_server_json_speedtest()
-        elif choice == "3":
-            show_librespeed_local_json_speedtest()
-        elif choice == "4":
-            show_save_librespeed_config()
-        elif choice == "5":
-            show_clear_librespeed_config()
-        elif choice == "6":
+        try:
+            console.print(build_librespeed_menu())
+            console.print("[yellow]公共 LibreSpeed 节点质量不保证。[/yellow]")
+            console.print("[dim]测速结果取决于 server list 中的服务器质量，不承诺跑满千兆。[/dim]")
+            choice = Prompt.ask("请选择 LibreSpeed 功能", choices=["1", "2", "3", "4", "5", "6"], default="6")
+            if choice == "1":
+                show_librespeed_preferred_speedtest()
+            elif choice == "2":
+                show_librespeed_server_json_speedtest()
+            elif choice == "3":
+                show_librespeed_local_json_speedtest()
+            elif choice == "4":
+                show_save_librespeed_config()
+            elif choice == "5":
+                show_clear_librespeed_config()
+            elif choice == "6":
+                break
+        except KeyboardInterrupt:
+            console.print("\n[yellow]已返回上一级菜单。[/yellow]")
             break
 
 
@@ -616,29 +687,41 @@ def show_librespeed_preferred_speedtest() -> None:
         console.print("[yellow]当前没有保存的 LibreSpeed 配置。[/yellow]")
         return
     print_librespeed_config(preferred)
-    result = run_librespeed_custom_speedtest(use_preferred=True)
+    result = run_speedtest_with_status(lambda: run_librespeed_custom_speedtest(use_preferred=True))
+    if result is None:
+        return
     print_speedtest_result(result)
 
 
 def show_librespeed_server_json_speedtest() -> None:
     """Run LibreSpeed using a remote server-json URL."""
     server_json_url = Prompt.ask("请输入远程 server-json URL").strip()
-    if not server_json_url:
-        console.print("[yellow]server-json URL 不能为空。[/yellow]")
+    if not validate_server_json_url(server_json_url):
         return
-    duration = prompt_optional_duration()
-    result = run_librespeed_custom_speedtest(server_json_url=server_json_url, duration=duration)
+    is_valid_duration, duration = prompt_optional_duration()
+    if not is_valid_duration:
+        return
+    result = run_speedtest_with_status(
+        lambda: run_librespeed_custom_speedtest(server_json_url=server_json_url, duration=duration)
+    )
+    if result is None:
+        return
     print_speedtest_result(result)
 
 
 def show_librespeed_local_json_speedtest() -> None:
     """Run LibreSpeed using a local server list JSON file."""
     local_json_path = Prompt.ask("请输入本地 local-json 文件路径").strip()
-    if not local_json_path:
-        console.print("[yellow]local-json 文件路径不能为空。[/yellow]")
+    if not validate_local_json_path(local_json_path):
         return
-    duration = prompt_optional_duration()
-    result = run_librespeed_custom_speedtest(local_json_path=local_json_path, duration=duration)
+    is_valid_duration, duration = prompt_optional_duration()
+    if not is_valid_duration:
+        return
+    result = run_speedtest_with_status(
+        lambda: run_librespeed_custom_speedtest(local_json_path=local_json_path, duration=duration)
+    )
+    if result is None:
+        return
     print_speedtest_result(result)
 
 
@@ -649,16 +732,16 @@ def show_save_librespeed_config() -> None:
     local_json_path = None
     if mode == "server-json":
         server_json_url = Prompt.ask("请输入远程 server-json URL").strip()
-        if not server_json_url:
-            console.print("[yellow]server-json URL 不能为空。[/yellow]")
+        if not validate_server_json_url(server_json_url):
             return
     else:
         local_json_path = Prompt.ask("请输入本地 local-json 文件路径").strip()
-        if not local_json_path:
-            console.print("[yellow]local-json 文件路径不能为空。[/yellow]")
+        if not validate_local_json_path(local_json_path):
             return
 
-    duration = prompt_optional_duration()
+    is_valid_duration, duration = prompt_optional_duration()
+    if not is_valid_duration:
+        return
     try:
         preferred = set_preferred_librespeed(
             mode=mode,
@@ -682,20 +765,40 @@ def show_clear_librespeed_config() -> None:
         console.print("[yellow]当前没有保存的 LibreSpeed 配置。[/yellow]")
 
 
-def prompt_optional_duration() -> int | None:
+def prompt_optional_duration() -> tuple[bool, int | None]:
     """Prompt for optional LibreSpeed duration."""
     raw_value = Prompt.ask("测速时长秒数，可留空使用 librespeed-cli 默认值", default="").strip()
     if not raw_value:
-        return None
+        return True, None
     try:
         duration = int(raw_value)
     except ValueError:
-        console.print("[yellow]测速时长必须是正整数，本次使用默认值。[/yellow]")
-        return None
-    if duration <= 0:
-        console.print("[yellow]测速时长必须是正整数，本次使用默认值。[/yellow]")
-        return None
-    return duration
+        console.print("[yellow]测速时长必须是 1 到 300 之间的整数。[/yellow]")
+        return False, None
+    if not 1 <= duration <= 300:
+        console.print("[yellow]测速时长必须是 1 到 300 之间的整数。[/yellow]")
+        return False, None
+    return True, duration
+
+
+def validate_server_json_url(server_json_url: str) -> bool:
+    """Validate a LibreSpeed server-json URL."""
+    if not server_json_url.startswith(("http://", "https://")):
+        console.print("[yellow]无效 URL。[/yellow]")
+        return False
+    return True
+
+
+def validate_local_json_path(local_json_path: str) -> bool:
+    """Validate a LibreSpeed local-json file path."""
+    path = Path(local_json_path).expanduser()
+    if not path.exists() or not path.is_file():
+        console.print("[yellow]文件不存在。[/yellow]")
+        return False
+    if path.suffix.lower() != ".json":
+        console.print("[yellow]不是 JSON 文件。[/yellow]")
+        return False
+    return True
 
 
 def print_librespeed_config(preferred: dict) -> None:
@@ -881,35 +984,39 @@ def build_advanced_menu() -> Panel:
 def show_advanced_menu() -> None:
     """Run advanced menu."""
     while True:
-        console.print(build_advanced_menu())
-        choice = Prompt.ask(
-            "请选择高级功能",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
-            default="12",
-        )
-        if choice == "1":
-            show_speedtest_by_server_id()
-        elif choice == "2":
-            show_keyword_speedtest()
-        elif choice == "3":
-            show_isp_city_preset_speedtest()
-        elif choice == "4":
-            show_save_last_speedtest_server()
-        elif choice == "5":
-            show_clear_preferred_speedtest()
-        elif choice == "6":
-            show_speedtest_config()
-        elif choice == "7":
-            show_last_speedtest_raw_summary()
-        elif choice == "8":
-            show_speedtest_backend_info()
-        elif choice == "9":
-            show_ookla_selection_details()
-        elif choice == "10":
-            show_librespeed_custom_menu()
-        elif choice == "11":
-            show_open_speedtest_cn()
-        elif choice == "12":
+        try:
+            console.print(build_advanced_menu())
+            choice = Prompt.ask(
+                "请选择高级功能",
+                choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
+                default="12",
+            )
+            if choice == "1":
+                show_speedtest_by_server_id()
+            elif choice == "2":
+                show_keyword_speedtest()
+            elif choice == "3":
+                show_isp_city_preset_speedtest()
+            elif choice == "4":
+                show_save_last_speedtest_server()
+            elif choice == "5":
+                show_clear_preferred_speedtest()
+            elif choice == "6":
+                show_speedtest_config()
+            elif choice == "7":
+                show_last_speedtest_raw_summary()
+            elif choice == "8":
+                show_speedtest_backend_info()
+            elif choice == "9":
+                show_ookla_selection_details()
+            elif choice == "10":
+                show_librespeed_custom_menu()
+            elif choice == "11":
+                show_open_speedtest_cn()
+            elif choice == "12":
+                break
+        except KeyboardInterrupt:
+            console.print("\n[yellow]已返回主菜单。[/yellow]")
             break
 
 

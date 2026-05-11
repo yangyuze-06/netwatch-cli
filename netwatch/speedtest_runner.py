@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from netwatch.analysis import (
+    build_network_path_summary,
+    detect_vpn_tun,
+    get_analysis_summary,
+    get_result_confidence,
+)
 from netwatch.config import get_preferred_librespeed
 from netwatch.network_info import get_preferred_physical_interface
 from netwatch.speedtest_backends import librespeed_cli, ookla_cli, python_speedtest
@@ -289,6 +295,8 @@ def get_speedtest_quality_details(result: SpeedtestResult) -> list[dict]:
 
 def summarize_speedtest_raw(result: SpeedtestResult) -> dict[str, str]:
     """Return a compact summary of raw speedtest details."""
+    confidence, _ = get_result_confidence(result)
+    path_summary = build_network_path_summary(result)
     summary = {
         "backend": result.backend,
         "server_id": result.server_id or "-",
@@ -297,6 +305,11 @@ def summarize_speedtest_raw(result: SpeedtestResult) -> dict[str, str]:
         "ping": f"{result.ping_ms:.2f} ms" if result.ping_ms is not None else "-",
         "jitter": f"{result.jitter_ms:.2f} ms" if result.jitter_ms is not None else "-",
         "packet_loss": f"{result.packet_loss:.2f}%" if result.packet_loss is not None else "-",
+        "confidence": confidence,
+        "vpn_tun": "yes" if detect_vpn_tun(result) else "no",
+        "current_exit": path_summary["current_exit"],
+        "speedtest_server": path_summary["speedtest_server"],
+        "analysis_summary": get_analysis_summary(result),
         "interface_name": "-",
         "internal_ip": "-",
         "external_ip": "-",

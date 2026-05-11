@@ -519,6 +519,21 @@ def test_runner_custom_librespeed_uses_direct_arguments(monkeypatch) -> None:
     ]
 
 
+def test_runner_custom_librespeed_updates_last_result(monkeypatch) -> None:
+    speedtest_runner.LAST_SUCCESSFUL_SPEEDTEST_RESULT = None
+
+    monkeypatch.setattr(
+        speedtest_runner.librespeed_cli,
+        "run_speedtest",
+        lambda **kwargs: SpeedtestResult(backend="librespeed-cli", server_name="Custom", download_mbps=100),
+    )
+
+    result = speedtest_runner.run_librespeed_custom_speedtest(server_json_url="https://example.com/servers.json")
+
+    assert result.server_name == "Custom"
+    assert speedtest_runner.get_last_successful_speedtest_result() is result
+
+
 def test_runner_custom_librespeed_uses_preferred_config(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
@@ -893,6 +908,103 @@ def test_show_librespeed_server_json_speedtest_uses_mocked_input(monkeypatch) ->
     cli_mod.show_librespeed_server_json_speedtest()
 
     assert calls == [{"server_json_url": "https://example.com/servers.json", "duration": 15}]
+
+
+def test_show_librespeed_local_json_rejects_missing_file(monkeypatch) -> None:
+    from netwatch import cli as cli_mod
+
+    called = []
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: "/tmp/does-not-exist.json")
+    monkeypatch.setattr(cli_mod, "run_librespeed_custom_speedtest", lambda **kwargs: called.append(kwargs))
+
+    cli_mod.show_librespeed_local_json_speedtest()
+
+    assert called == []
+
+
+def test_show_librespeed_local_json_rejects_non_json_file(monkeypatch, tmp_path) -> None:
+    from netwatch import cli as cli_mod
+
+    text_file = tmp_path / "servers.txt"
+    text_file.write_text("{}", encoding="utf-8")
+    called = []
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: str(text_file))
+    monkeypatch.setattr(cli_mod, "run_librespeed_custom_speedtest", lambda **kwargs: called.append(kwargs))
+
+    cli_mod.show_librespeed_local_json_speedtest()
+
+    assert called == []
+
+
+def test_show_librespeed_server_json_rejects_invalid_url(monkeypatch) -> None:
+    from netwatch import cli as cli_mod
+
+    called = []
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: "example.com/servers.json")
+    monkeypatch.setattr(cli_mod, "run_librespeed_custom_speedtest", lambda **kwargs: called.append(kwargs))
+
+    cli_mod.show_librespeed_server_json_speedtest()
+
+    assert called == []
+
+
+def test_show_librespeed_duration_rejects_non_numeric(monkeypatch) -> None:
+    from netwatch import cli as cli_mod
+
+    answers = iter(["https://example.com/servers.json", "abc"])
+    called = []
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(cli_mod, "run_librespeed_custom_speedtest", lambda **kwargs: called.append(kwargs))
+
+    cli_mod.show_librespeed_server_json_speedtest()
+
+    assert called == []
+
+
+def test_show_librespeed_duration_rejects_out_of_range(monkeypatch) -> None:
+    from netwatch import cli as cli_mod
+
+    answers = iter(["https://example.com/servers.json", "301"])
+    called = []
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(cli_mod, "run_librespeed_custom_speedtest", lambda **kwargs: called.append(kwargs))
+
+    cli_mod.show_librespeed_server_json_speedtest()
+
+    assert called == []
+
+
+def test_librespeed_submenu_ctrl_c_returns_to_parent(monkeypatch) -> None:
+    from netwatch import cli as cli_mod
+
+    def raise_keyboard_interrupt(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli_mod.Prompt, "ask", raise_keyboard_interrupt)
+
+    cli_mod.show_librespeed_custom_menu()
+
+
+def test_advanced_menu_ctrl_c_returns_to_main(monkeypatch) -> None:
+    from netwatch import cli as cli_mod
+
+    def raise_keyboard_interrupt(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli_mod.Prompt, "ask", raise_keyboard_interrupt)
+
+    cli_mod.show_advanced_menu()
+
+
+def test_speedtest_ctrl_c_cancels_current_task() -> None:
+    from netwatch import cli as cli_mod
+
+    def raise_keyboard_interrupt():
+        raise KeyboardInterrupt
+
+    result = cli_mod.run_speedtest_with_status(raise_keyboard_interrupt)
+
+    assert result is None
 
 
 def test_build_advanced_menu_contains_librespeed_before_speedtest_cn() -> None:
