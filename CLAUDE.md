@@ -5,9 +5,20 @@
 请先阅读：
 
 1. `README.md`
-2. `docs/handoff-to-claude.md`
-3. `docs/v0.8.2-plan.md`
-4. `docs/v0.8.3-plan.md`
+2. `docs/handoff-to-codex.md`（最新交接文档）
+3. `docs/handoff-to-claude.md`
+4. `docs/v0.8.2-plan.md`
+5. `docs/v0.8.3-plan.md`
+
+本轮 Claude Code 已完成：
+
+- 删除 speedtest.cn 手动录入功能和 manual parser。
+- 高级功能菜单重排为 11 项。
+- ISP 预设关键词优化（Hong Kong 降级为最后 fallback）。
+- 测速质量诊断增强（按触发条件给出针对性建议）。
+- README、handoff-to-claude.md、AGENTS.md 已更新相关边界。
+
+后续切回 Codex 时，Codex 应先读 `docs/handoff-to-codex.md`。
 
 当前项目重点：
 

@@ -221,7 +221,8 @@ pip install speedtest-cli
 
 本项目可由 Codex / Claude Code 等 coding agent 协作维护。
 
-- 交接文档见 [docs/handoff-to-claude.md](docs/handoff-to-claude.md)。
+- 交接文档见 [docs/handoff-to-codex.md](docs/handoff-to-codex.md)（推荐，最新）。
+- Claude Code 接手文档见 [docs/handoff-to-claude.md](docs/handoff-to-claude.md)。
 - Agent 项目指令见 [AGENTS.md](AGENTS.md)。
 - Claude Code 专用入口见 [CLAUDE.md](CLAUDE.md)。
 

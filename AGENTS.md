@@ -35,6 +35,13 @@ python -m pytest -q
 ## 接手前必读
 
 - `README.md`
+- `docs/handoff-to-codex.md`
 - `docs/handoff-to-claude.md`
 - `docs/v0.8.2-plan.md`
 - `docs/v0.8.3-plan.md`
+
+## 当前禁止
+
+- 不要重新加入 speedtest.cn 手动录入/粘贴结果功能（已删除）。
+- 不要逆向 speedtest.cn 私有 API。
+- 不要大重构。
