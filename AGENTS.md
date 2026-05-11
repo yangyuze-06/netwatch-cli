@@ -29,6 +29,7 @@ python -m pytest -q
 - 稳定 official Ookla CLI 后端。
 - 处理 Ookla 服务器选择不佳。
 - 保存常用 server id。
+- 支持 LibreSpeed custom server list，并说明公共节点质量不保证。
 - 做测速结果质量诊断。
 - 保留 Python speedtest-cli fallback，但明确提示结果可能偏低。
 
@@ -39,6 +40,7 @@ python -m pytest -q
 - `docs/handoff-to-claude.md`
 - `docs/v0.8.2-plan.md`
 - `docs/v0.8.3-plan.md`
+- `docs/v0.9-plan.md`
 
 ## 当前禁止
 

@@ -78,6 +78,47 @@ def clear_preferred_speedtest(path: Path | None = None) -> bool:
     return existed
 
 
+def get_preferred_librespeed(path: Path | None = None) -> dict[str, Any] | None:
+    """Return preferred LibreSpeed custom server list config when present."""
+    preferred = load_config(path).get("preferred_librespeed")
+    return preferred if isinstance(preferred, dict) else None
+
+
+def set_preferred_librespeed(
+    *,
+    mode: str,
+    server_json_url: str | None = None,
+    local_json_path: str | None = None,
+    duration: int | None = None,
+    path: Path | None = None,
+) -> dict[str, Any]:
+    """Save non-sensitive LibreSpeed custom server list preferences."""
+    if mode not in {"server-json", "local-json"}:
+        raise ValueError("LibreSpeed 配置 mode 必须是 server-json 或 local-json。")
+    if bool(server_json_url) == bool(local_json_path):
+        raise ValueError("server_json_url 和 local_json_path 只能二选一。")
+
+    config = load_config(path)
+    preferred = {
+        "mode": mode,
+        "server_json_url": server_json_url or None,
+        "local_json_path": local_json_path or None,
+        "duration": duration,
+    }
+    config["preferred_librespeed"] = preferred
+    save_config(config, path)
+    return preferred
+
+
+def clear_preferred_librespeed(path: Path | None = None) -> bool:
+    """Remove preferred LibreSpeed config while preserving other settings."""
+    config = load_config(path)
+    existed = "preferred_librespeed" in config
+    config.pop("preferred_librespeed", None)
+    save_config(config, path)
+    return existed
+
+
 def extract_interface_name(result: SpeedtestResult) -> str | None:
     """Extract interface name from backend raw data when available."""
     raw = result.raw

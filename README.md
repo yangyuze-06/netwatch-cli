@@ -20,7 +20,7 @@
 V0.8 以后测速使用多后端架构，优先级是：
 
 1. `official-ookla-cli`：官方 Ookla CLI，推荐，通常更接近网页测速或官方客户端。
-2. `librespeed-cli`：开源备选测速后端，测速网络和 Ookla 不同。
+2. `librespeed-cli`：开源备选测速后端，测速网络和 Ookla 不同。V0.9 支持自定义 `server-json` URL 或本地 `local-json` 文件。
 3. `python-speedtest-cli`：Python 社区版 fallback，结果可能低于网页测速或官方客户端。
 
 macOS 推荐安装官方 Ookla CLI：
@@ -47,6 +47,14 @@ Ookla 自动选服可能受公网出口、运营商路由、服务器负载和 T
 
 如果结果明显异常，可以进入“高级功能”，用“按关键词筛选服务器测速”，输入 `Guangzhou`、`Guangdong`、`China Mobile`、`Mobile`、`Hong Kong`、`Tokyo`、`IPA` 等关键词筛选 Ookla 服务器，然后手动指定 server id 或让工具自动测试前 3 个候选。找到相对稳定的服务器后，可以保存为默认测速服务器。
 
+V0.9 起，高级功能也支持 LibreSpeed 自定义服务器列表测速：
+
+- 远程列表：`--server-json <url>`
+- 本地列表：`--local-json <file>`
+- 可保存常用 LibreSpeed 配置到 `~/.netwatch/config.json`
+
+LibreSpeed 是开源测速后端，公共节点免费但质量不保证；测速结果取决于 server list 中的服务器质量。自建或可信的近距离节点通常更可靠，但它仍不能承诺复现 `speedtest.cn` 网页中的“广东移动_Vixtel_1”结果。
+
 ## 常用测速服务器配置
 
 V0.8.3 起，`netwatch-cli` 支持把最近一次成功测速的 Ookla server id 保存为默认配置：
@@ -57,12 +65,15 @@ V0.8.3 起，`netwatch-cli` 支持把最近一次成功测速的 Ookla server id
 
 配置只保存非敏感信息，例如 backend、server id、server name、location、interface，不保存密码、token、stok 或公网 IP。普通“带宽测速”检测到默认服务器后会先询问是否使用；如果该服务器测速失败，会自动回退到自动测速。
 
+LibreSpeed 自定义列表配置会保存在同一文件的 `preferred_librespeed` 中，只保存 URL/path/duration，不保存 token、cookie 或公网 IP。
+
 测速结果展示后会做基础质量诊断。如果出现高 ping、高 jitter、丢包或下载速度明显偏低，会提示“当前测速结果可能不代表真实最大带宽”，并建议尝试指定测速服务器或用浏览器测速对照。
 
 当前推荐做法：
 
 - `official-ookla-cli` 作为默认通用后端。
 - 保存本地实测最快、最稳定的 Ookla server id。
+- 如有可信 LibreSpeed server list，可用高级功能保存远程 `server-json` 或本地 `local-json`。
 - 把 `speedtest.cn` 网页作为对照基准。
 - 高级功能支持“打开 speedtest.cn 网页对照测速”，通过浏览器打开对照页面。netwatch-cli 不会自动读取 speedtest.cn 网页结果、不逆向私有 API、不支持手动回填。
 - 本项目暂不逆向 `speedtest.cn` 私有网页 API；未来如果有正式 SDK/API 授权，会作为独立后端接入。自动浏览器读取（如 Playwright）可作为未来实验方向，但当前版本不实现。
@@ -239,6 +250,7 @@ pip install speedtest-cli
 - 支持更多测速后端和结果对比。
 - 增加授权的 speedtest.cn 或运营商专用测速后端扩展。
 - 增强 Ookla 服务器关键词筛选和多服务器自动对比策略。
+- 增强 LibreSpeed 自定义服务器列表体验。
 
 更多 V0.2 修复记录见 [docs/v0.2-plan.md](docs/v0.2-plan.md)。
 更多 V0.3 修复记录见 [docs/v0.3-plan.md](docs/v0.3-plan.md)。
@@ -248,6 +260,7 @@ pip install speedtest-cli
 更多 V0.8 修复记录见 [docs/v0.8-plan.md](docs/v0.8-plan.md)。
 更多 V0.8.2 修复记录见 [docs/v0.8.2-plan.md](docs/v0.8.2-plan.md)。
 更多 V0.8.3 修复记录见 [docs/v0.8.3-plan.md](docs/v0.8.3-plan.md)。
+更多 V0.9 修复记录见 [docs/v0.9-plan.md](docs/v0.9-plan.md)。
 
 ## 为什么部分设备无法显示主机名
 

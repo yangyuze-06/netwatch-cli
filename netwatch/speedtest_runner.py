@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from netwatch.config import get_preferred_librespeed
 from netwatch.network_info import get_preferred_physical_interface
 from netwatch.speedtest_backends import librespeed_cli, ookla_cli, python_speedtest
 from netwatch.speedtest_backends.models import SpeedtestResult
@@ -84,6 +85,42 @@ def run_speedtest_with_backend(
     if backend == "python-speedtest-cli":
         return remember_successful_result(python_speedtest.run_speedtest(server_id=server_id))
     return SpeedtestResult(backend=backend, error=f"未知测速后端：{backend}")
+
+
+def run_librespeed_custom_speedtest(
+    *,
+    server_json_url: str | None = None,
+    local_json_path: str | None = None,
+    duration: int | None = None,
+    source_ip: str | None = None,
+    use_preferred: bool = False,
+) -> SpeedtestResult:
+    """Run LibreSpeed with a custom server list or saved LibreSpeed config."""
+    if use_preferred:
+        preferred = get_preferred_librespeed()
+        if not preferred:
+            return SpeedtestResult(backend="librespeed-cli", error="当前没有保存的 LibreSpeed 配置。")
+        server_json_url = str(preferred.get("server_json_url") or "").strip() or None
+        local_json_path = str(preferred.get("local_json_path") or "").strip() or None
+        duration = parse_optional_int(preferred.get("duration"))
+
+    return remember_successful_result(
+        librespeed_cli.run_speedtest(
+            server_json_url=server_json_url,
+            local_json_path=local_json_path,
+            duration=duration,
+            source_ip=source_ip,
+        )
+    )
+
+
+def parse_optional_int(value: object) -> int | None:
+    """Parse an optional positive integer value."""
+    try:
+        parsed = int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed and parsed > 0 else None
 
 
 def remember_successful_result(result: SpeedtestResult) -> SpeedtestResult:
@@ -309,4 +346,3 @@ def show_backend_info() -> dict:
 def get_selection_details() -> str | dict | None:
     """Return Ookla server selection details when available."""
     return ookla_cli.get_selection_details()
-

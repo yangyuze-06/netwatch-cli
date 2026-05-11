@@ -9,10 +9,13 @@ from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
 from netwatch.config import (
+    clear_preferred_librespeed,
     clear_preferred_speedtest,
     get_config_path,
+    get_preferred_librespeed,
     get_preferred_speedtest,
     save_preferred_speedtest,
+    set_preferred_librespeed,
 )
 from netwatch.network_info import (
     NetworkCandidate,
@@ -47,6 +50,7 @@ from netwatch.speedtest_runner import (
     list_speedtest_servers,
     run_best_speedtest,
     run_configured_speedtest,
+    run_librespeed_custom_speedtest,
     run_speedtest_with_backend,
     show_backend_info,
     summarize_speedtest_raw,
@@ -569,6 +573,141 @@ def show_open_speedtest_cn() -> None:
     console.print("[dim]本项目不调用或逆向 speedtest.cn 私有 API。[/dim]")
 
 
+def build_librespeed_menu() -> Panel:
+    """Build LibreSpeed custom server list submenu."""
+    menu = "\n".join(
+        [
+            "[bold cyan]1[/bold cyan]. 使用已保存的 LibreSpeed 配置测速",
+            "[bold cyan]2[/bold cyan]. 输入远程 server-json URL 测速",
+            "[bold cyan]3[/bold cyan]. 输入本地 local-json 文件测速",
+            "[bold cyan]4[/bold cyan]. 保存 LibreSpeed 配置",
+            "[bold cyan]5[/bold cyan]. 清除 LibreSpeed 配置",
+            "[bold cyan]6[/bold cyan]. 返回",
+        ]
+    )
+    return Panel(menu, title="LibreSpeed 自定义服务器列表测速", border_style="cyan")
+
+
+def show_librespeed_custom_menu() -> None:
+    """Run LibreSpeed custom server list submenu."""
+    while True:
+        console.print(build_librespeed_menu())
+        console.print("[yellow]公共 LibreSpeed 节点质量不保证。[/yellow]")
+        console.print("[dim]测速结果取决于 server list 中的服务器质量，不承诺跑满千兆。[/dim]")
+        choice = Prompt.ask("请选择 LibreSpeed 功能", choices=["1", "2", "3", "4", "5", "6"], default="6")
+        if choice == "1":
+            show_librespeed_preferred_speedtest()
+        elif choice == "2":
+            show_librespeed_server_json_speedtest()
+        elif choice == "3":
+            show_librespeed_local_json_speedtest()
+        elif choice == "4":
+            show_save_librespeed_config()
+        elif choice == "5":
+            show_clear_librespeed_config()
+        elif choice == "6":
+            break
+
+
+def show_librespeed_preferred_speedtest() -> None:
+    """Run LibreSpeed using saved custom list config."""
+    preferred = get_preferred_librespeed()
+    if not preferred:
+        console.print("[yellow]当前没有保存的 LibreSpeed 配置。[/yellow]")
+        return
+    print_librespeed_config(preferred)
+    result = run_librespeed_custom_speedtest(use_preferred=True)
+    print_speedtest_result(result)
+
+
+def show_librespeed_server_json_speedtest() -> None:
+    """Run LibreSpeed using a remote server-json URL."""
+    server_json_url = Prompt.ask("请输入远程 server-json URL").strip()
+    if not server_json_url:
+        console.print("[yellow]server-json URL 不能为空。[/yellow]")
+        return
+    duration = prompt_optional_duration()
+    result = run_librespeed_custom_speedtest(server_json_url=server_json_url, duration=duration)
+    print_speedtest_result(result)
+
+
+def show_librespeed_local_json_speedtest() -> None:
+    """Run LibreSpeed using a local server list JSON file."""
+    local_json_path = Prompt.ask("请输入本地 local-json 文件路径").strip()
+    if not local_json_path:
+        console.print("[yellow]local-json 文件路径不能为空。[/yellow]")
+        return
+    duration = prompt_optional_duration()
+    result = run_librespeed_custom_speedtest(local_json_path=local_json_path, duration=duration)
+    print_speedtest_result(result)
+
+
+def show_save_librespeed_config() -> None:
+    """Save LibreSpeed custom server list config."""
+    mode = Prompt.ask("请选择配置类型", choices=["server-json", "local-json"], default="server-json")
+    server_json_url = None
+    local_json_path = None
+    if mode == "server-json":
+        server_json_url = Prompt.ask("请输入远程 server-json URL").strip()
+        if not server_json_url:
+            console.print("[yellow]server-json URL 不能为空。[/yellow]")
+            return
+    else:
+        local_json_path = Prompt.ask("请输入本地 local-json 文件路径").strip()
+        if not local_json_path:
+            console.print("[yellow]local-json 文件路径不能为空。[/yellow]")
+            return
+
+    duration = prompt_optional_duration()
+    try:
+        preferred = set_preferred_librespeed(
+            mode=mode,
+            server_json_url=server_json_url,
+            local_json_path=local_json_path,
+            duration=duration,
+        )
+    except ValueError as exc:
+        console.print(f"[yellow]{exc}[/yellow]")
+        return
+    console.print("[green]已保存 LibreSpeed 配置。[/green]")
+    print_librespeed_config(preferred)
+
+
+def show_clear_librespeed_config() -> None:
+    """Clear saved LibreSpeed custom server list config."""
+    existed = clear_preferred_librespeed()
+    if existed:
+        console.print("[green]已清除 LibreSpeed 配置。[/green]")
+    else:
+        console.print("[yellow]当前没有保存的 LibreSpeed 配置。[/yellow]")
+
+
+def prompt_optional_duration() -> int | None:
+    """Prompt for optional LibreSpeed duration."""
+    raw_value = Prompt.ask("测速时长秒数，可留空使用 librespeed-cli 默认值", default="").strip()
+    if not raw_value:
+        return None
+    try:
+        duration = int(raw_value)
+    except ValueError:
+        console.print("[yellow]测速时长必须是正整数，本次使用默认值。[/yellow]")
+        return None
+    if duration <= 0:
+        console.print("[yellow]测速时长必须是正整数，本次使用默认值。[/yellow]")
+        return None
+    return duration
+
+
+def print_librespeed_config(preferred: dict) -> None:
+    """Print saved LibreSpeed config."""
+    table = Table(title="LibreSpeed 配置")
+    table.add_column("Field", style="bold cyan")
+    table.add_column("Value")
+    for key in ("mode", "server_json_url", "local_json_path", "duration"):
+        table.add_row(key, str(preferred.get(key) or "-"))
+    console.print(table)
+
+
 def show_open_router_admin() -> None:
     """Open a selected router admin page in the default browser."""
     url = choose_router_admin_url()
@@ -731,8 +870,9 @@ def build_advanced_menu() -> Panel:
             "[bold cyan]7[/bold cyan]. 显示最近一次测速摘要",
             "[bold cyan]8[/bold cyan]. 显示测速后端信息",
             "[bold cyan]9[/bold cyan]. 显示 Ookla server selection details",
-            "[bold cyan]10[/bold cyan]. 打开 speedtest.cn 网页对照测速",
-            "[bold cyan]11[/bold cyan]. 返回主菜单",
+            "[bold cyan]10[/bold cyan]. LibreSpeed 自定义服务器列表测速",
+            "[bold cyan]11[/bold cyan]. 打开 speedtest.cn 网页对照测速",
+            "[bold cyan]12[/bold cyan]. 返回主菜单",
         ]
     )
     return Panel(menu, title="高级功能", border_style="cyan")
@@ -744,8 +884,8 @@ def show_advanced_menu() -> None:
         console.print(build_advanced_menu())
         choice = Prompt.ask(
             "请选择高级功能",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"],
-            default="11",
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
+            default="12",
         )
         if choice == "1":
             show_speedtest_by_server_id()
@@ -766,8 +906,10 @@ def show_advanced_menu() -> None:
         elif choice == "9":
             show_ookla_selection_details()
         elif choice == "10":
-            show_open_speedtest_cn()
+            show_librespeed_custom_menu()
         elif choice == "11":
+            show_open_speedtest_cn()
+        elif choice == "12":
             break
 
 

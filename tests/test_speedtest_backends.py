@@ -1,5 +1,7 @@
+import subprocess
+
 from netwatch.speedtest_backends.models import SpeedtestResult
-from netwatch.speedtest_backends import ookla_cli
+from netwatch.speedtest_backends import librespeed_cli, ookla_cli
 from netwatch.speedtest_backends.ookla_cli import parse_ookla_result
 from netwatch.speedtest_backends.python_speedtest import result_from_bits
 from netwatch import speedtest_runner
@@ -85,6 +87,207 @@ def test_backend_priority_python_fallback(monkeypatch) -> None:
     monkeypatch.setattr(speedtest_runner.python_speedtest, "run_speedtest", lambda server_id=None: SpeedtestResult("python-speedtest-cli"))
 
     assert speedtest_runner.run_best_speedtest().backend == "python-speedtest-cli"
+
+
+def test_librespeed_command_includes_server_json(monkeypatch) -> None:
+    commands = []
+    monkeypatch.setattr(librespeed_cli, "is_available", lambda: True)
+
+    class Completed:
+        stdout = '{"download": 120, "upload": 40, "ping": 8, "server": "Custom"}'
+
+    def fake_run_command(command):
+        commands.append(command)
+        return Completed()
+
+    monkeypatch.setattr(librespeed_cli, "run_command", fake_run_command)
+
+    result = librespeed_cli.run_speedtest(server_json_url="https://example.com/servers.json")
+
+    assert result.backend == "librespeed-cli"
+    assert commands[0] == ["librespeed-cli", "--server-json", "https://example.com/servers.json", "--json"]
+    assert result.download_mbps == 120
+    assert result.upload_mbps == 40
+    assert result.ping_ms == 8
+    assert result.server_name == "Custom"
+
+
+def test_librespeed_parse_dict_payload() -> None:
+    result = librespeed_cli.parse_librespeed_result(
+        {
+            "download": 75.36,
+            "upload": 26.03,
+            "server": {"name": "Amsterdam, Netherlands", "url": "http://spd-nlsrv.hostkey.com/"},
+        }
+    )
+
+    assert result.download_mbps == 75.36
+    assert result.upload_mbps == 26.03
+    assert result.server_name == "Amsterdam, Netherlands"
+
+
+def test_librespeed_parse_list_payload() -> None:
+    result = librespeed_cli.parse_librespeed_result(
+        [
+            {
+                "timestamp": "2026-05-11T13:40:11.026461+08:00",
+                "server": {"name": "Amsterdam, Netherlands", "url": "http://spd-nlsrv.hostkey.com/"},
+                "client": {"ip": "64.118.150.131", "city": "Tokyo", "country": "JP"},
+                "upload": 26.03,
+                "download": 75.36,
+            }
+        ]
+    )
+
+    assert result.download_mbps == 75.36
+    assert result.upload_mbps == 26.03
+    assert result.server_name == "Amsterdam, Netherlands"
+
+
+def test_librespeed_command_includes_local_json(monkeypatch) -> None:
+    commands = []
+    monkeypatch.setattr(librespeed_cli, "is_available", lambda: True)
+
+    class Completed:
+        stdout = '{"download_mbps": 90, "upload_mbps": 20}'
+
+    monkeypatch.setattr(
+        librespeed_cli,
+        "run_command",
+        lambda command: commands.append(command) or Completed(),
+    )
+
+    result = librespeed_cli.run_speedtest(local_json_path="/tmp/servers.json")
+
+    assert result.error is None
+    assert commands[0] == ["librespeed-cli", "--local-json", "/tmp/servers.json", "--json"]
+    assert result.download_MBps == 11.25
+
+
+def test_librespeed_rejects_mutually_exclusive_server_sources(monkeypatch) -> None:
+    monkeypatch.setattr(librespeed_cli, "is_available", lambda: True)
+
+    result = librespeed_cli.run_speedtest(
+        server_json_url="https://example.com/servers.json",
+        local_json_path="/tmp/servers.json",
+    )
+
+    assert result.error is not None
+    assert "只能二选一" in result.error
+
+
+def test_librespeed_command_includes_duration_and_source(monkeypatch) -> None:
+    commands = []
+    monkeypatch.setattr(librespeed_cli, "is_available", lambda: True)
+
+    class Completed:
+        stdout = '{"download": 100}'
+
+    monkeypatch.setattr(
+        librespeed_cli,
+        "run_command",
+        lambda command: commands.append(command) or Completed(),
+    )
+
+    librespeed_cli.run_speedtest(duration=15, source_ip="192.168.31.75")
+
+    assert "--duration" in commands[0]
+    assert commands[0][commands[0].index("--duration") + 1] == "15"
+    assert "--source" in commands[0]
+    assert commands[0][commands[0].index("--source") + 1] == "192.168.31.75"
+
+
+def test_librespeed_subprocess_failure_does_not_traceback(monkeypatch) -> None:
+    monkeypatch.setattr(librespeed_cli, "is_available", lambda: True)
+
+    def fake_run_command(command):
+        return SpeedtestResult(backend="librespeed-cli", error="failed")
+
+    monkeypatch.setattr(librespeed_cli, "run_command", fake_run_command)
+
+    result = librespeed_cli.run_speedtest(server_json_url="https://example.com/servers.json")
+
+    assert result.backend == "librespeed-cli"
+    assert result.error == "failed"
+
+
+def test_librespeed_called_process_error_is_friendly() -> None:
+    error = subprocess.CalledProcessError(1, ["librespeed-cli"], stderr="bad server")
+
+    def raise_error(*args, **kwargs):
+        raise error
+
+    original_run = librespeed_cli.subprocess.run
+    librespeed_cli.subprocess.run = raise_error
+    try:
+        result = librespeed_cli.run_command(["librespeed-cli", "--json"])
+    finally:
+        librespeed_cli.subprocess.run = original_run
+
+    assert isinstance(result, SpeedtestResult)
+    assert result.error == "bad server"
+
+
+def test_librespeed_invalid_json_returns_error(monkeypatch) -> None:
+    monkeypatch.setattr(librespeed_cli, "is_available", lambda: True)
+
+    class Completed:
+        stdout = "not json"
+
+    monkeypatch.setattr(librespeed_cli, "run_command", lambda command: Completed())
+
+    result = librespeed_cli.run_speedtest()
+
+    assert result.backend == "librespeed-cli"
+    assert result.error is not None
+    assert "无法解析 LibreSpeed CLI JSON" in result.error
+
+
+def test_librespeed_empty_list_returns_error(monkeypatch) -> None:
+    monkeypatch.setattr(librespeed_cli, "is_available", lambda: True)
+
+    class Completed:
+        stdout = "[]"
+        stderr = ""
+
+    monkeypatch.setattr(librespeed_cli, "run_command", lambda command: Completed())
+
+    result = librespeed_cli.run_speedtest()
+
+    assert result.backend == "librespeed-cli"
+    assert result.error == "Empty LibreSpeed result list"
+
+
+def test_librespeed_invalid_payload_type_returns_error(monkeypatch) -> None:
+    monkeypatch.setattr(librespeed_cli, "is_available", lambda: True)
+
+    class Completed:
+        stdout = '"not a result object"'
+        stderr = ""
+
+    monkeypatch.setattr(librespeed_cli, "run_command", lambda command: Completed())
+
+    result = librespeed_cli.run_speedtest()
+
+    assert result.backend == "librespeed-cli"
+    assert result.error is not None
+    assert "Unexpected LibreSpeed payload type" in result.error
+
+
+def test_librespeed_reads_json_from_stderr_when_stdout_empty(monkeypatch) -> None:
+    monkeypatch.setattr(librespeed_cli, "is_available", lambda: True)
+
+    class Completed:
+        stdout = ""
+        stderr = '[{"download":75.36,"upload":26.03,"server":{"name":"Amsterdam, Netherlands"}}]'
+
+    monkeypatch.setattr(librespeed_cli, "run_command", lambda command: Completed())
+
+    result = librespeed_cli.run_speedtest()
+
+    assert result.error is None
+    assert result.download_mbps == 75.36
+    assert result.server_name == "Amsterdam, Netherlands"
 
 
 def test_no_backend_available_returns_friendly_error(monkeypatch) -> None:
@@ -289,6 +492,67 @@ def test_configured_speedtest_fallbacks_when_preferred_fails(monkeypatch) -> Non
     assert result.server_id == "auto"
     assert calls[0] == ("official-ookla-cli", "bad", "en0")
     assert calls[1] == ("official-ookla-cli", None, "en0")
+
+
+def test_runner_custom_librespeed_uses_direct_arguments(monkeypatch) -> None:
+    calls = []
+
+    def fake_run(**kwargs):
+        calls.append(kwargs)
+        return SpeedtestResult(backend="librespeed-cli", server_name="Custom")
+
+    monkeypatch.setattr(speedtest_runner.librespeed_cli, "run_speedtest", fake_run)
+
+    result = speedtest_runner.run_librespeed_custom_speedtest(
+        server_json_url="https://example.com/servers.json",
+        duration=15,
+    )
+
+    assert result.backend == "librespeed-cli"
+    assert calls == [
+        {
+            "server_json_url": "https://example.com/servers.json",
+            "local_json_path": None,
+            "duration": 15,
+            "source_ip": None,
+        }
+    ]
+
+
+def test_runner_custom_librespeed_uses_preferred_config(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        speedtest_runner,
+        "get_preferred_librespeed",
+        lambda: {
+            "mode": "local-json",
+            "server_json_url": None,
+            "local_json_path": "/tmp/servers.json",
+            "duration": 20,
+        },
+    )
+
+    def fake_run(**kwargs):
+        calls.append(kwargs)
+        return SpeedtestResult(backend="librespeed-cli", server_name="Saved")
+
+    monkeypatch.setattr(speedtest_runner.librespeed_cli, "run_speedtest", fake_run)
+
+    result = speedtest_runner.run_librespeed_custom_speedtest(use_preferred=True)
+
+    assert result.server_name == "Saved"
+    assert calls[0]["local_json_path"] == "/tmp/servers.json"
+    assert calls[0]["duration"] == 20
+
+
+def test_runner_custom_librespeed_without_preferred_returns_error(monkeypatch) -> None:
+    monkeypatch.setattr(speedtest_runner, "get_preferred_librespeed", lambda: None)
+
+    result = speedtest_runner.run_librespeed_custom_speedtest(use_preferred=True)
+
+    assert result.backend == "librespeed-cli"
+    assert result.error is not None
+    assert "没有保存" in result.error
 
 
 # --- Patch 1: ISP preset keywords ---
@@ -608,3 +872,33 @@ def test_show_open_speedtest_cn_calls_webbrowser(monkeypatch) -> None:
     assert "speedtest.cn" in output, f"Missing speedtest.cn in output: {output[:300]}"
     assert "不调用或逆向" in output, f"Missing privacy note: {output[:300]}"
     assert "不会自动回传" in output, f"Missing no-auto-feedback note: {output[:300]}"
+
+
+def test_show_librespeed_server_json_speedtest_uses_mocked_input(monkeypatch) -> None:
+    """LibreSpeed CLI flow should pass mocked user input without real network calls."""
+    from netwatch import cli as cli_mod
+
+    answers = iter(["https://example.com/servers.json", "15"])
+    calls = []
+
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: next(answers))
+
+    def fake_run(**kwargs):
+        calls.append(kwargs)
+        return SpeedtestResult(backend="librespeed-cli", download_mbps=100)
+
+    monkeypatch.setattr(cli_mod, "run_librespeed_custom_speedtest", fake_run)
+    monkeypatch.setattr(cli_mod, "print_speedtest_result", lambda result: None)
+
+    cli_mod.show_librespeed_server_json_speedtest()
+
+    assert calls == [{"server_json_url": "https://example.com/servers.json", "duration": 15}]
+
+
+def test_build_advanced_menu_contains_librespeed_before_speedtest_cn() -> None:
+    from netwatch.cli import build_advanced_menu
+
+    rendered = build_advanced_menu().renderable
+
+    assert "LibreSpeed 自定义服务器列表测速" in rendered
+    assert rendered.index("LibreSpeed 自定义服务器列表测速") < rendered.index("speedtest.cn")

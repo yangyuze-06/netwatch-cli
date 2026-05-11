@@ -35,8 +35,9 @@
 7. 显示最近一次测速摘要
 8. 显示测速后端信息
 9. 显示 Ookla server selection details
-10. 打开 speedtest.cn 网页对照测速
-11. 返回主菜单
+10. LibreSpeed 自定义服务器列表测速
+11. 打开 speedtest.cn 网页对照测速
+12. 返回主菜单
 ```
 
 对应函数均在 `netwatch/cli.py` 中。
@@ -45,10 +46,10 @@
 
 - **Official Ookla CLI**：默认通用测速后端（`netwatch/speedtest_backends/ookla_cli.py`）。使用绝对路径 `/opt/homebrew/bin/speedtest`，已验证可区分 `.venv/bin/speedtest` 的 Python shadow。
 - **Python speedtest-cli**：仅作为 fallback（`netwatch/speedtest_backends/python_speedtest.py`），结果可能偏低，已标注提示。
-- **LibreSpeed CLI**：雏形后端（`netwatch/speedtest_backends/librespeed_cli.py`），目前仅尝试 `--json` / `-f json` 两种参数，不支持指定 server id。后续可扩展 custom server list。
+- **LibreSpeed CLI**：开源备选后端（`netwatch/speedtest_backends/librespeed_cli.py`），V0.9 支持 `--server-json <url>` / `--local-json <file>` 自定义服务器列表，可保存常用配置。公共节点质量不保证，自建节点最可靠。
 - **speedtest.cn**：只是浏览器网页对照入口，**不是 CLI 后端**。不使用、不调用、不抓包、不逆向 speedtest.cn 私有 API。未来如有 speedtest.cn 官方 SDK/API 授权，可作为独立后端接入。
 - **Playwright 自动浏览器测速**：未来实验方向，不在当前稳定菜单里实现。
-- **LibreSpeed / iperf3 / HTTP file download test**：后续更现实的可控测速方向。
+- **iperf3 / HTTP file download test**：后续更现实的可控测速方向。
 
 ## 4. 已知真实网络现象
 
@@ -64,7 +65,7 @@
 |------|------|
 | `netwatch/cli.py` | 主菜单、高级菜单、展示逻辑 |
 | `netwatch/speedtest_runner.py` | 测速调度、fallback、质量诊断、server keyword filter、ISP 预设关键词、最近一次测速结果缓存 |
-| `netwatch/config.py` | `~/.netwatch/config.json` 配置读写，仅保存非敏感信息（server id、name、location、interface） |
+| `netwatch/config.py` | `~/.netwatch/config.json` 配置读写，仅保存非敏感信息（Ookla server id/name/location/interface、LibreSpeed URL/path/duration） |
 | `netwatch/network_info.py` | 网卡识别、物理接口选择、TUN/utun/198.18.0.0/15 过滤 |
 | `netwatch/proxy_probe.py` | 当前 CLI 公网出口 IP 检测（ipinfo.io） |
 | `netwatch/router.py` | 默认网关、路由器后台 URL、小米 LuCI API、设备合并 |
@@ -73,8 +74,8 @@
 | `netwatch/speedtest_backends/models.py` | `SpeedtestResult` 数据结构 |
 | `netwatch/speedtest_backends/ookla_cli.py` | 官方 Ookla CLI 后端 |
 | `netwatch/speedtest_backends/python_speedtest.py` | Python speedtest-cli fallback |
-| `netwatch/speedtest_backends/librespeed_cli.py` | LibreSpeed CLI 后端（雏形） |
-| `tests/test_speedtest_backends.py` | 测速相关测试（58 total，含后端、质量诊断、ISP 预设、网页对照） |
+| `netwatch/speedtest_backends/librespeed_cli.py` | LibreSpeed CLI 后端，支持自定义 server-json/local-json |
+| `tests/test_speedtest_backends.py` | 测速相关测试（含后端、LibreSpeed custom list、质量诊断、ISP 预设、网页对照） |
 | `tests/test_proxy_probe.py` | 出口 IP 检测测试 |
 | `tests/test_config.py` | 配置读写测试 |
 | `tests/test_router.py` | 路由器相关测试 |
@@ -84,7 +85,7 @@
 
 ### P0
 - [x] 确认当前代码已提交（commit `27e097d`）。
-- [ ] 继续保持 `compileall + pytest` 全绿（当前 58 passed）。
+- [ ] 继续保持 `compileall + pytest` 全绿。
 - [ ] 避免再加入 speedtest.cn 手动录入功能。
 
 ### P1
@@ -93,7 +94,7 @@
 - [ ] 完善最近一次测速摘要（当前 `show_last_speedtest_raw_summary` 展示字段有限）。
 
 ### P2
-- [ ] 调研并实现 **LibreSpeed custom server list**：
+- [x] 实现 **LibreSpeed custom server list**：
   - 支持 `--server-json URL`。
   - 支持 `--local-json` 文件。
   - 支持保存常用 LibreSpeed server list。

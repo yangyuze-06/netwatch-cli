@@ -17,21 +17,71 @@ def is_available() -> bool:
     return shutil.which("librespeed-cli") is not None
 
 
-def run_speedtest() -> SpeedtestResult:
+def run_speedtest(
+    server_json_url: str | None = None,
+    local_json_path: str | None = None,
+    duration: int | None = None,
+    source_ip: str | None = None,
+) -> SpeedtestResult:
     """Run LibreSpeed CLI using best-effort JSON support."""
     if not is_available():
         return SpeedtestResult(backend=BACKEND_NAME, error="LibreSpeed CLI is not installed.")
+    if server_json_url and local_json_path:
+        return SpeedtestResult(backend=BACKEND_NAME, error="server_json_url 和 local_json_path 只能二选一。")
 
-    for command in (["librespeed-cli", "--json"], ["librespeed-cli", "-f", "json"]):
+    commands = build_commands(
+        server_json_url=server_json_url,
+        local_json_path=local_json_path,
+        duration=duration,
+        source_ip=source_ip,
+    )
+    last_error: SpeedtestResult | None = None
+
+    for command in commands:
         result = run_command(command)
         if isinstance(result, SpeedtestResult):
+            last_error = result
             continue
+        raw_output = (result.stdout or "").strip() or (result.stderr or "").strip()
         try:
-            return parse_librespeed_result(json.loads(result.stdout))
-        except json.JSONDecodeError:
+            return parse_librespeed_result(json.loads(raw_output))
+        except json.JSONDecodeError as exc:
+            last_error = SpeedtestResult(
+                backend=BACKEND_NAME,
+                raw=raw_output,
+                error=f"无法解析 LibreSpeed CLI JSON：{exc}",
+            )
+        except (TypeError, ValueError) as exc:
+            last_error = SpeedtestResult(
+                backend=BACKEND_NAME,
+                raw=raw_output,
+                error=str(exc),
+            )
             continue
 
+    if last_error is not None:
+        return last_error
     return SpeedtestResult(backend=BACKEND_NAME, error="当前 librespeed-cli 版本无法输出可解析 JSON。")
+
+
+def build_commands(
+    *,
+    server_json_url: str | None = None,
+    local_json_path: str | None = None,
+    duration: int | None = None,
+    source_ip: str | None = None,
+) -> list[list[str]]:
+    """Build LibreSpeed CLI command variants."""
+    base = ["librespeed-cli"]
+    if server_json_url:
+        base.extend(["--server-json", server_json_url])
+    if local_json_path:
+        base.extend(["--local-json", local_json_path])
+    if duration is not None:
+        base.extend(["--duration", str(duration)])
+    if source_ip:
+        base.extend(["--source", source_ip])
+    return [base + ["--json"], base + ["-f", "json"]]
 
 
 def run_command(command: list[str]) -> subprocess.CompletedProcess[str] | SpeedtestResult:
@@ -48,10 +98,27 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess[str] | Speedt
         return SpeedtestResult(backend=BACKEND_NAME, error=str(exc))
 
 
-def parse_librespeed_result(payload: dict[str, Any]) -> SpeedtestResult:
+def normalize_librespeed_payload(payload: Any) -> dict[str, Any]:
+    """Normalize LibreSpeed JSON payload variants to a single result dict."""
+    if isinstance(payload, list):
+        if not payload:
+            raise ValueError("Empty LibreSpeed result list")
+        payload = payload[0]
+    if not isinstance(payload, dict):
+        raise TypeError(f"Unexpected LibreSpeed payload type: {type(payload)}")
+    return payload
+
+
+def parse_librespeed_result(payload: Any) -> SpeedtestResult:
     """Parse common LibreSpeed JSON fields."""
+    payload = normalize_librespeed_payload(payload)
     download_mbps = optional_float(payload.get("download") or payload.get("download_mbps"))
     upload_mbps = optional_float(payload.get("upload") or payload.get("upload_mbps"))
+    server = payload.get("server")
+    if isinstance(server, dict):
+        server_name = str(server.get("name") or server.get("url") or "")
+    else:
+        server_name = str(server) if server is not None else None
     return SpeedtestResult(
         backend=BACKEND_NAME,
         ping_ms=optional_float(payload.get("ping")),
@@ -60,7 +127,7 @@ def parse_librespeed_result(payload: dict[str, Any]) -> SpeedtestResult:
         download_MBps=download_mbps / 8 if download_mbps is not None else None,
         upload_mbps=upload_mbps,
         upload_MBps=upload_mbps / 8 if upload_mbps is not None else None,
-        server_name=str(payload.get("server")) if payload.get("server") is not None else None,
+        server_name=server_name or None,
         raw=payload,
     )
 
