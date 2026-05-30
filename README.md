@@ -10,8 +10,8 @@
 - 浏览器授权定位：用户手动允许后读取浏览器 geolocation。
 - 离线中国省/市/区粗定位：本地最近区县中心点匹配。
 - 局域网设备发现：Ping + ARP 扫描。
-- 宽带测速：`speedtest.cn` browser automation 简洁入口。
-- 代理/当前出口测速：先识别 CLI 出口，再测速并可展开详细诊断。
+- 宽带测速：`speedtest.cn` 浏览器自动化简洁入口。
+- 代理/当前出口测速：识别 CLI 出口并测速，可展开详细诊断。
 - 路由器管理后台辅助打开。
 - 高级功能：Ookla / LibreSpeed / Python fallback、服务器筛选、配置管理、测速摘要。
 
@@ -19,13 +19,14 @@
 
 ### Requirements
 
-- Python 3.10+。
-- macOS / Linux 终端环境。
-- 可选：官方 Ookla CLI 二进制 `speedtest`，用于更可靠的通用测速诊断。
-- 可选：Playwright Chromium，用于 `speedtest.cn` 浏览器自动化测速。
-- 可选：LibreSpeed CLI 二进制，用于 LibreSpeed 后端。
+- Python 3.10+
+- macOS 或 Linux 终端环境
+- Git
+- 可选：Playwright Chromium，用于 `speedtest.cn` 浏览器自动化测速
+- 可选：官方 Ookla CLI 二进制 `speedtest`，用于 Ookla 后端
+- 可选：LibreSpeed CLI 二进制，用于 LibreSpeed 后端
 
-### 从源码安装
+### 安装
 
 ```bash
 git clone https://github.com/yangyuze-06/netwatch-cli.git
@@ -33,62 +34,71 @@ cd netwatch-cli
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 python -m pip install -e .
+python -m playwright install chromium
+netwatch
+```
+
+如果只想做最小安装，可以跳过 `requirements.txt` 和 Playwright Chromium：
+
+```bash
+python -m pip install -e .
+```
+
+再次运行：
+
+```bash
+cd netwatch-cli
+source .venv/bin/activate
 netwatch
 ```
 
 也可以直接运行模块：
 
 ```bash
-source .venv/bin/activate
 python -m netwatch.cli
 ```
 
-### 使用 requirements.txt 安装依赖
+### 安装验证
 
-如果你想一次性安装运行和测试常用依赖：
+安装完成后，在项目根目录运行：
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m pip install -e .
-netwatch
+scripts/check_install.sh
 ```
 
-### speedtest.cn browser automation
-
-启用 `speedtest.cn` browser automation 需要可选依赖：
+脚本会检查 Python 依赖、`netwatch` 命令、Playwright Chromium，以及可选的 `speedtest` 命令。如果提示 Playwright Chromium 未安装，运行：
 
 ```bash
-python -m pip install -e ".[browser]"
 python -m playwright install chromium
 ```
 
-这会安装 Playwright Python 包，并下载用于后台网页测速的 Chromium。`speedtest.cn` 自动化只是模拟用户打开网页并点击测速，不是官方 API 后端。
+## 可选外部工具
 
-### macOS 可选外部工具
+### 官方 Ookla CLI
 
-如需官方 Ookla CLI：
+`speedtest` 是官方 Ookla CLI 二进制；`speedtest-cli` 是 Python 社区包，只作为 Python fallback 后端。不要把 `speedtest-cli` 当成官方 Ookla CLI。
+
+macOS：
 
 ```bash
 brew tap teamookla/speedtest
 brew install speedtest
 ```
 
-注意：
+Linux：
 
-- `speedtest` = 官方 Ookla CLI 二进制。
-- `speedtest-cli` = Python 社区包，只作为 fallback backend。
-- 不要把 `speedtest-cli` 当成官方 Ookla CLI；`brew install speedtest-cli` 不是本项目推荐的官方 Ookla 安装方式。
+Python 依赖可以通过 `venv + pip` 安装。官方 Ookla CLI 需要按发行版从 Ookla 官方渠道安装，不由 `requirements.txt` 管理。Debian / Ubuntu 常见方式如下：
 
-### Linux 说明
+```bash
+curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash
+sudo apt install speedtest
+```
 
-- Python 依赖可通过 `venv + pip` 安装。
-- Playwright Chromium 通过 `python -m playwright install chromium` 安装。
-- Official Ookla CLI 需要按发行版从 Ookla 官方渠道安装，不由 `requirements.txt` 管理。
-- LibreSpeed CLI 是外部二进制，也不由 `requirements.txt` 管理。
+### LibreSpeed CLI
+
+LibreSpeed CLI 是外部二进制，不由 `requirements.txt` 管理。未安装时，相关后端会不可用，但其他功能仍可运行。
 
 ## 使用
 
@@ -123,7 +133,6 @@ brew install speedtest
 - 构建阶段可临时使用 AreaCity 的 `ok_geo.csv.7z` 提取中心点，但不把 130MB+ 解压数据放入项目。
 - 当前算法是“区县中心点最近邻”，不是真实行政边界。
 - 区县交界处可能误判。例如广州永和附近可能返回黄埔区或增城区。
-- 未来可选增强：polygon/GeoJSON 精确边界包，或用户自配 AMap/Baidu online provider。
 
 重建数据：
 
@@ -131,7 +140,7 @@ brew install speedtest
 python scripts/build_china_district_centers.py
 ```
 
-## 测速边界
+## 测速说明
 
 实时网卡流量不等于最大带宽。它表示当前这一秒本机正在使用的吞吐量；Speedtest 会主动连接公网测速服务器，用于估算线路能力。
 
@@ -154,36 +163,37 @@ git diff --check
 ## 项目结构
 
 ```text
-netwatch/                         核心代码
-  cli.py                          主菜单入口和顶层调度
-  cli_modules/                    CLI 展示与交互模块
-    common.py                     通用 console / 兼容 helper
-    speedtest.py                  测速相关 CLI 展示与交互
-    router.py                     路由器相关 CLI 展示与交互
-    lan.py                        局域网扫描相关 CLI 展示与交互
-    location.py                   定位相关 CLI 展示与交互
-  config.py                       用户配置读写
-  network_info.py                 本机网络和网卡识别
-  proxy_probe.py                  当前公网出口检测
-  device_location.py              浏览器授权定位
-  location/                       定位与离线行政区划
-    china_admin_lookup.py
-    data/                         轻量内置数据
-  speedtest/                      测速领域模块
-    analysis.py                   测速结果一致性和路径分析
-    runner.py                     测速调度与诊断
-    speed.py                      实时网卡流量采样
-    speedtest_cn*.py              speedtest.cn browser automation
-    backends/                     Ookla / LibreSpeed / Python 测速后端
-scripts/                          构建与维护脚本
-tests/                            单元测试和 mock 测试
-docs/
-  handoff/                        给不同 AI agent 的交接文档
-  plans/                          版本规划与历史路线
-  features/                       专项功能设计文档
+netwatch-cli/
+├── netwatch/                     核心代码
+│   ├── cli.py                    主菜单入口和顶层调度
+│   ├── cli_modules/              CLI 展示与交互模块
+│   │   ├── common.py             通用 console / 兼容 helper
+│   │   ├── speedtest.py          测速相关 CLI 展示与交互
+│   │   ├── router.py             路由器相关 CLI 展示与交互
+│   │   ├── lan.py                局域网扫描相关 CLI 展示与交互
+│   │   └── location.py           定位相关 CLI 展示与交互
+│   ├── config.py                 用户配置读写
+│   ├── network_info.py           本机网络和网卡识别
+│   ├── proxy_probe.py            当前公网出口检测
+│   ├── device_location.py        浏览器授权定位
+│   ├── location/                 定位与离线行政区划
+│   │   ├── china_admin_lookup.py
+│   │   └── data/                 轻量内置数据
+│   └── speedtest/                测速领域模块
+│       ├── analysis.py           测速结果一致性和路径分析
+│       ├── runner.py             测速调度与诊断
+│       ├── speed.py              实时网卡流量采样
+│       ├── speedtest_cn*.py      speedtest.cn browser automation
+│       └── backends/             Ookla / LibreSpeed / Python 测速后端
+├── scripts/                      构建与维护脚本
+├── tests/                        单元测试和 mock 测试
+└── docs/
+    ├── handoff/                  给不同 AI agent 的交接文档
+    ├── plans/                    版本规划与历史路线
+    └── features/                 专项功能设计文档
 ```
 
-这次项目仍保持当前包布局，不迁移到 `src/`。测速相关业务模块已收敛到 `netwatch/speedtest/`，旧路径保留轻量兼容 wrapper。
+项目保持当前包布局，不迁移到 `src/`。测速相关业务模块已收敛到 `netwatch/speedtest/`，旧路径保留轻量兼容 wrapper。
 
 ## 数据与许可证
 
