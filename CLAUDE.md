@@ -20,6 +20,8 @@
 
 后续切回 Codex 时，Codex 应先读 `docs/handoff-to-codex.md`。
 
+后续由 DeepSeek 接手时，请先读 `docs/handoff-to-deepseek.md`。
+
 当前项目重点：
 
 - 这是一个 Python CLI 网络诊断工具。
