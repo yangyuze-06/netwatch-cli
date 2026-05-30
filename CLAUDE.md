@@ -5,10 +5,10 @@
 请先阅读：
 
 1. `README.md`
-2. `docs/handoff-to-codex.md`（最新交接文档）
-3. `docs/handoff-to-claude.md`
-4. `docs/v0.8.2-plan.md`
-5. `docs/v0.8.3-plan.md`
+2. `docs/handoff/handoff-to-codex.md`（最新交接文档）
+3. `docs/handoff/handoff-to-claude.md`
+4. `docs/plans/v0.8.2-plan.md`
+5. `docs/plans/v0.8.3-plan.md`
 
 本轮 Claude Code 已完成：
 
@@ -18,9 +18,9 @@
 - 测速质量诊断增强（按触发条件给出针对性建议）。
 - README、handoff-to-claude.md、AGENTS.md 已更新相关边界。
 
-后续切回 Codex 时，Codex 应先读 `docs/handoff-to-codex.md`。
+后续切回 Codex 时，Codex 应先读 `docs/handoff/handoff-to-codex.md`。
 
-后续由 DeepSeek 接手时，请先读 `docs/handoff-to-deepseek.md`。
+后续由 DeepSeek 接手时，请先读 `docs/handoff/handoff-to-deepseek.md`。
 
 当前项目重点：
 

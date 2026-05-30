@@ -37,11 +37,11 @@ git diff --check
 
 - `README.md`
 - `AGENTS.md`
-- `docs/handoff-to-codex.md`
-- `docs/handoff-to-deepseek.md`
-- `docs/speedtest-cn-browser-automation.md`
+- `docs/handoff/handoff-to-codex.md`
+- `docs/handoff/handoff-to-deepseek.md`
+- `docs/features/speedtest-cn-browser-automation.md`
 
-后续由 DeepSeek 接手，详见 `docs/handoff-to-deepseek.md`。
+后续由 DeepSeek 接手，详见 `docs/handoff/handoff-to-deepseek.md`。
 
 ## 当前禁止
 

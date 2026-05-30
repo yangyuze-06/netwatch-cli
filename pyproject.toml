@@ -25,6 +25,12 @@ netwatch = "netwatch.cli:main"
 [tool.setuptools.packages.find]
 include = ["netwatch*"]
 
+[tool.setuptools.package-data]
+netwatch = [
+    "location/data/README.md",
+    "location/data/china_district_centers.csv",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

@@ -121,7 +121,7 @@ git push
 
 ## 9. Claude Code 接手注意事项
 
-- 接手后先读 `README.md`、`docs/v0.8.2-plan.md`、`docs/v0.8.3-plan.md`、`docs/handoff-to-claude.md`。
+- 接手后先读 `README.md`、`docs/plans/v0.8.2-plan.md`、`docs/plans/v0.8.3-plan.md`、`docs/handoff/handoff-to-claude.md`。
 - 不要一上来大重构。
 - 每次只做一个小版本。
 - 每次修改后运行 compileall 和 pytest。

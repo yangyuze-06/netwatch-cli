@@ -1,37 +1,44 @@
 # netwatch-cli
 
-`netwatch-cli` 是一个轻量、交互式的命令行网络诊断工具，用于查看本机网络状态、发现局域网设备，并通过多个后端运行公网测速。
+`netwatch-cli` 是一个轻量、交互式的命令行网络状态工具，用于查看本机网络、局域网设备、当前公网出口和测速结果。它面向日常排障：快速知道“我现在连在哪、出口在哪、测速走的是哪条路径”。
 
 ## 功能
 
-- 查看实时网卡上传/下载吞吐量。
-- 查看本机网卡名称、IPv4 地址和 MAC 地址。
-- 通过 Ping + ARP 发现局域网在线设备。
-- 打开默认网关和常见路由器管理后台。
-- 使用多后端运行公网带宽测速。
-- 检查代理/当前 CLI 出口并测速（默认简洁 + 可选详细诊断）。
-- 支持测速服务器筛选、常用配置保存和结果质量提示。
-- 高级功能中提供 `speedtest.cn` browser automation 实验入口。
+- 实时网卡上传/下载流量。
+- 本机局域网信息：主要网卡、IPv4、MAC、默认网关。
+- 公网 IP 出口识别：国家/地区、城市、ISP/组织。
+- 浏览器授权定位：用户手动允许后读取浏览器 geolocation。
+- 离线中国省/市/区粗定位：本地最近区县中心点匹配。
+- 局域网设备发现：Ping + ARP 扫描。
+- 宽带测速：`speedtest.cn` browser automation 简洁入口。
+- 代理/当前出口测速：先识别 CLI 出口，再测速并可展开详细诊断。
+- 路由器管理后台辅助打开。
+- 高级功能：Ookla / LibreSpeed / Python fallback、服务器筛选、配置管理、测速摘要。
 
 ## Quick Start
 
 ```bash
-cd /Users/y4n9/Workspace/Projects/My-github-projects/netwatch-cli
 python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python -m netwatch.cli
-```
-
-可选：启用 `netwatch` 命令。
-
-```bash
 source .venv/bin/activate
 pip install -e .
 netwatch
 ```
 
-macOS 推荐安装官方 Ookla CLI：
+也可以直接运行模块：
+
+```bash
+source .venv/bin/activate
+python -m netwatch.cli
+```
+
+启用 `speedtest.cn` browser automation 需要可选依赖：
+
+```bash
+pip install -e ".[browser]"
+playwright install chromium
+```
+
+macOS 如需官方 Ookla CLI：
 
 ```bash
 brew tap teamookla/speedtest
@@ -41,12 +48,6 @@ brew install speedtest
 不要把 `brew install speedtest-cli` 当成官方 Ookla CLI；`speedtest-cli` 是 Python 社区版工具，Homebrew 已标记为 deprecated。
 
 ## 使用
-
-```bash
-python -m netwatch.cli
-```
-
-主菜单：
 
 ```text
 1. 查看实时网卡流量
@@ -61,95 +62,95 @@ python -m netwatch.cli
 
 查看实时网卡流量时，按 `Ctrl+C` 返回菜单。主菜单按 `Ctrl+C` 会优雅退出。
 
-## 测速后端
+## 隐私说明
 
-测速后端按以下顺序 fallback：
+- 公网 IP 定位来自 IP 数据库，可能显示 VPN/TUN/代理出口位置，不代表真实所在地。
+- 浏览器授权定位只在用户手动选择并允许浏览器权限时运行。
+- `netwatch-cli` 不保存、不上传用户真实位置。
+- 离线中国行政区划匹配完全在本地完成。
+- 高德/百度 API 不是默认依赖；默认运行不需要地图服务 Key。
+- 配置文件 `~/.netwatch/config.json` 只保存非敏感偏好，不保存密码、`stok`、token、cookie 或公网 IP。
 
-1. `official-ookla-cli`：官方 Ookla CLI，推荐使用。
-2. `librespeed-cli`：开源备选后端，支持自定义 `server-json` URL 或本地 `local-json` 文件。
-3. `python-speedtest-cli`：Python 社区版 fallback，结果可能低于浏览器测速或官方客户端。
+## 离线中国行政区划
 
-普通“宽带测速（speedtest.cn）”使用基于 Playwright 的 browser automation，在后台打开 `speedtest.cn` 网页模拟测速，为普通用户提供接近网页测速体验的结果。
+`netwatch/location/data/china_district_centers.csv` 是项目内置的轻量区县中心点数据，用于把浏览器经纬度粗略显示成中国省/市/区县。
 
-“通用测速诊断”（高级功能第 1 项）保留了原始的多后端 fallback 逻辑，会尽量选择真实 LAN/Wi-Fi 网卡，例如 macOS 上的 `en0` / `en1`，并避开 `utun`、`tun`、`tap`、`198.18.0.0/15` 等 TUN/VPN 或虚拟出口。
+- 数据来源：[AreaCity-JsSpider-StatsGov](https://github.com/xiangyuecn/AreaCity-JsSpider-StatsGov)。
+- 运行时只读取本地 `china_district_centers.csv`，不联网。
+- 构建阶段可临时使用 AreaCity 的 `ok_geo.csv.7z` 提取中心点，但不把 130MB+ 解压数据放入项目。
+- 当前算法是“区县中心点最近邻”，不是真实行政边界。
+- 区县交界处可能误判。例如广州永和附近可能返回黄埔区或增城区。
+- 未来可选增强：polygon/GeoJSON 精确边界包，或用户自配 AMap/Baidu online provider。
 
-“代理/当前出口测速”（主菜单 5）会保留当前 CLI 进程实际出口，先显示公网出口信息，再调用最佳可用后端测速。默认输出简洁（测速表格 + 一句简短判断），测速完成后询问是否查看详细诊断（Result confidence、网络路径分析、VPN/TUN 检测等）。公网 IP 只用于诊断展示，不会保存。
+重建数据：
+
+```bash
+python scripts/build_china_district_centers.py
+```
 
 ## 测速边界
 
 实时网卡流量不等于最大带宽。它表示当前这一秒本机正在使用的吞吐量；Speedtest 会主动连接公网测速服务器，用于估算线路能力。
 
-Ookla、LibreSpeed 和 `speedtest.cn` 的服务器池不同。某个后端测速偏低，可能是选服、距离、负载、运营商路由或代理/TUN 影响，不一定代表本地宽带异常。
+普通“宽带测速（speedtest.cn）”使用 Playwright 后台打开网页、点击测速并从 DOM 文本读取结果。它不是 `speedtest.cn` 官方 API 后端，不抓包、不读取 Cookie、不逆向私有接口，失败时不会自动 fallback 到 Ookla。
 
-`speedtest.cn` 只作为网页对照入口。本项目不逆向 `speedtest.cn` 私有 API，不抓取隐藏接口，也不支持手动粘贴测速结果回填。
-
-V0.10 增加了 `speedtest.cn` browser automation。V0.10.4 已将其提升为主菜单"宽带测速"默认入口，为普通用户提供接近网页测速体验的简洁结果（Source / Server / Location / Ping / Jitter / Download / Upload）。该功能会在后台 headless 浏览器中打开 `speedtest.cn`、点击测速并从 DOM 文本读取结果，但不等同于官方 API 后端，不抓包、不读取 Cookie、不逆向私有接口。
-
-`speedtest.cn` 开始测速前可能出现页面内提醒弹窗，实验功能会尝试点击“不再提醒”或“继续测速”。地理位置权限和默认模拟位置属于浏览器自动化内部实现细节，用于避免权限弹窗阻塞测速；普通用户路径不会显示这些细节，也不会读取或保存用户真实位置。
-
-实验入口的状态提示来自 Playwright 实际执行节点，例如页面打开、按钮找到、测速结果字段首次出现，而不是预设假进度。由于网页结构可能变化，部分阶段状态可能缺失，最终以结果表格或错误提示为准。
-
-启用该实验功能需要可选依赖：
-
-```bash
-pip install -e ".[browser]"
-playwright install chromium
-```
-
-也可以直接安装：
-
-```bash
-pip install playwright
-playwright install chromium
-```
-
-当前 CLI 入口不保存截图。若未来需要开发者调试模式，应重新设计隐藏或开发者专用入口，避免干扰普通测速流程。
-
-`speedtest.cn` 页面/CDN 可能对 headless Chromium、HTTP/2 或自动化环境不友好，已知失败模式包括 `ERR_HTTP2_PROTOCOL_ERROR`。工具会先在 headless 模式下用兼容参数自动重试一次；如果仍失败，会提示使用 `speedtest.cn` 网页对照测速，或改用 Ookla / LibreSpeed 后端，不会静默打开可见窗口。
-
-## 配置
-
-配置文件：
-
-```text
-~/.netwatch/config.json
-```
-
-只保存非敏感偏好，例如：
-
-- 常用 Ookla backend、server id、server name、location、interface。
-- 常用 LibreSpeed `server-json` URL 或本地 `local-json` 路径。
-- 测试 duration。
-
-不会保存密码、路由器凭据、`stok`、token、cookie 或公网 IP。
-
-## 路由器与局域网
-
-局域网设备发现依赖 Ping 和本机 ARP cache。MAC 地址通常只对同一二层局域网内的设备可靠。
-
-路由器设备名同步是实验功能，目前只支持小米/Redmi `stok` API 的只读设备列表。GSWIFI / OpenWrt / LuCI / 其他厂商后台暂不自动同步，请优先使用快速扫描。
-
-## 开发测试
-
-```bash
-source .venv/bin/activate
-python -m compileall netwatch
-pytest -q
-python -m pytest -q
-git diff --check
-```
+“通用测速诊断”（高级功能第 1 项）保留 Ookla / LibreSpeed / Python fallback，并包含 Result confidence、网络路径分析、VPN/TUN 检测等详细信息。
 
 所有公网测速、subprocess、`curl`、`requests`、Playwright 浏览器访问和路由器 API 测试都必须 mock。
 
+## 开发命令
+
+```bash
+source .venv/bin/activate
+python scripts/build_china_district_centers.py
+python -m compileall netwatch
+pytest -q
+git diff --check
+```
+
+## 项目结构
+
+```text
+netwatch/                         核心代码
+  cli.py                          交互式 CLI 和展示逻辑
+  config.py                       用户配置读写
+  network_info.py                 本机网络和网卡识别
+  proxy_probe.py                  当前公网出口检测
+  device_location.py              浏览器授权定位
+  location/                       定位与离线行政区划
+    china_admin_lookup.py
+    data/                         轻量内置数据
+  speedtest_backends/             Ookla / LibreSpeed / Python 测速后端
+  speedtest_runner.py             测速调度与诊断
+  speedtest_cn*.py                speedtest.cn browser automation
+  analysis.py                     测速结果一致性和路径分析
+scripts/                          构建与维护脚本
+tests/                            单元测试和 mock 测试
+docs/
+  handoff/                        给不同 AI agent 的交接文档
+  plans/                          版本规划与历史路线
+  features/                       专项功能设计文档
+```
+
+这次项目仍保持当前包布局，不迁移到 `src/`。`speedtest_runner.py`、`speedtest_cn.py`、`speedtest_cn_browser.py` 和 `speed.py` 暂不移动，后续可在测试覆盖稳定时再拆到 `netwatch/speedtest/`。
+
+## 数据与许可证
+
+- AreaCity-JsSpider-StatsGov 使用 MIT license。
+- 本项目当前未包含独立 `LICENSE` 文件，项目许可证待补充。
+- 不要把 `ok_geo.csv` 或 `ok_geo.csv.7z` 放入仓库；运行时只需要轻量 CSV。
+
 ## 文档
 
-- [Codex handoff](docs/handoff-to-codex.md)
-- [Claude handoff](docs/handoff-to-claude.md)
-- [DeepSeek handoff](docs/handoff-to-deepseek.md)
-- [V0.8.2 plan](docs/v0.8.2-plan.md)
-- [V0.8.3 plan](docs/v0.8.3-plan.md)
-- [V0.9 plan](docs/v0.9-plan.md)
-- [V0.9.3 plan](docs/v0.9.3-plan.md)
-- [speedtest.cn browser automation experiment](docs/speedtest-cn-browser-automation.md)
+- [Docs index](docs/README.md)
+- [Codex handoff](docs/handoff/handoff-to-codex.md)
+- [Claude handoff](docs/handoff/handoff-to-claude.md)
+- [DeepSeek handoff](docs/handoff/handoff-to-deepseek.md)
+- [speedtest.cn browser automation](docs/features/speedtest-cn-browser-automation.md)
 
-后续由 DeepSeek 接手，详见 [DeepSeek handoff](docs/handoff-to-deepseek.md)。
+## Roadmap
+
+- 可选 polygon/GeoJSON 精确边界数据包。
+- 更好的多平台测速后端。
+- 更稳定的路由器设备识别。
+- 更清晰的 provider 插件体系。

@@ -10,18 +10,18 @@
 - **speedtest.cn 只保留"打开网页对照测速"**：`show_open_speedtest_cn()` 使用 `webbrowser.open()`，不询问用户粘贴结果，不要求手动录入。
 - **明确 netwatch-cli 不自动读取 speedtest.cn 网页结果**：文档和代码注释中已写明。
 - **明确不逆向 speedtest.cn 私有 API**。
-- **新增 V0.10 实验设计文档**：`docs/speedtest-cn-browser-automation.md` 记录 Playwright browser automation 实验方向，只做网页自动化实验，不作为稳定后端。
+- **新增 V0.10 实验设计文档**：`docs/features/speedtest-cn-browser-automation.md` 记录 Playwright browser automation 实验方向，只做网页自动化实验，不作为稳定后端。
 - **实现 V0.10 speedtest.cn browser automation 实验功能**：新增 parser、Playwright 延迟 import 实验模块、高级功能入口和 mock tests。
 - **V0.10.2 CLI 体验简化**：speedtest.cn browser automation 实验入口只询问是否继续；确认后固定后台 headless 运行，不暴露 debug / 可见浏览器 / screenshot 交互。
 - **保留以下高级功能**：指定 Ookla server id 测速、关键词筛选、运营商/城市预设、保存默认服务器、查看/清除测速配置、测速摘要、测速后端信息、Ookla selection details。
 - **新增测速质量诊断**：`get_speedtest_quality_details()` — 按触发条件（高 ping、高 jitter、丢包、低 download、TUN/VPN）返回针对性建议。
 - **新增 ISP 预设关键词优化**：`build_isp_preset_keywords()` — China Mobile 优先关键词不含 Hong Kong，Guangzhou/Guangdong 优先排序，Hong Kong 仅作为最后 fallback 并显示警告。
 - **最新验证**：V0.10 实验功能实现后 `pytest -q` / `python -m pytest -q` 均为 130 passed，`git diff --check` 通过。
-- **README 和 docs/handoff-to-claude.md 已更新相关边界说明**。
+- **README 和 docs/handoff/handoff-to-claude.md 已更新相关边界说明**。
 
 当前包版本请以 `pyproject.toml` / `netwatch/__init__.py` 为准；V0.10 实验功能已实现但不作为稳定后端。最近提交：
 
-后续由 DeepSeek 接手，详见 `docs/handoff-to-deepseek.md`。
+后续由 DeepSeek 接手，详见 `docs/handoff/handoff-to-deepseek.md`。
 
 ```
 27e097d refactor: Remove manual speedtest.cn entry, reorganize advanced menu
@@ -160,8 +160,8 @@
   git diff --check
   ```
 - **小步提交，不要大重构**。
-- **接手前先读文档**：README.md → AGENTS.md → CLAUDE.md → docs/handoff-to-codex.md → docs/handoff-to-claude.md → docs/speedtest-cn-browser-automation.md。
+- **接手前先读文档**：README.md → AGENTS.md → CLAUDE.md → docs/handoff/handoff-to-codex.md → docs/handoff/handoff-to-claude.md → docs/features/speedtest-cn-browser-automation.md。
 
 ## 8. Suggested Prompt for Codex
 
-> 请阅读 README.md、AGENTS.md、CLAUDE.md、docs/handoff-to-codex.md、docs/handoff-to-claude.md。先不要写代码，先做接手审计：确认当前版本号、高级菜单结构、测速后端优先级、测试状态。然后评估下一步 V0.9 方向。优先考虑 LibreSpeed custom server list 或 HTTP file download test 作为下一个可控测速后端。不要逆向 speedtest.cn 私有 API，不要重新加入 speedtest.cn 手动录入功能。给出 Patch Plan 后等我确认再执行。
+> 请阅读 README.md、AGENTS.md、CLAUDE.md、docs/handoff/handoff-to-codex.md、docs/handoff/handoff-to-claude.md。先不要写代码，先做接手审计：确认当前版本号、高级菜单结构、测速后端优先级、测试状态。然后评估下一步 V0.9 方向。优先考虑 LibreSpeed custom server list 或 HTTP file download test 作为下一个可控测速后端。不要逆向 speedtest.cn 私有 API，不要重新加入 speedtest.cn 手动录入功能。给出 Patch Plan 后等我确认再执行。

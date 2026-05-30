@@ -105,5 +105,5 @@
 ## 7. Suggested Prompt for DeepSeek
 
 ```text
-请先读 README.md、AGENTS.md、CLAUDE.md、docs/handoff-to-deepseek.md、docs/handoff-to-codex.md、docs/speedtest-cn-browser-automation.md。先运行 git status、git log --oneline -5、python -m compileall netwatch、pytest -q、python -m pytest -q。然后输出接手审计报告。当前最高优先级是 P0：把主菜单 4 改为宽带测速（speedtest.cn），调用 speedtest.cn browser automation；把原 run_best_speedtest() 移到高级功能第 1 项，命名为通用测速诊断（Ookla / LibreSpeed / Python fallback）。不要逆向 API，不抓包，不写真实公网测试。
+请先读 README.md、AGENTS.md、CLAUDE.md、docs/handoff/handoff-to-deepseek.md、docs/handoff/handoff-to-codex.md、docs/features/speedtest-cn-browser-automation.md。先运行 git status、git log --oneline -5、python -m compileall netwatch、pytest -q、python -m pytest -q。然后输出接手审计报告。当前最高优先级是 P0：把主菜单 4 改为宽带测速（speedtest.cn），调用 speedtest.cn browser automation；把原 run_best_speedtest() 移到高级功能第 1 项，命名为通用测速诊断（Ookla / LibreSpeed / Python fallback）。不要逆向 API，不抓包，不写真实公网测试。
 ```
