@@ -184,7 +184,7 @@ def build_lan_discovery_menu() -> Panel:
         [
             "[bold cyan]1[/bold cyan]. 快速扫描：Ping + ARP",
             "[bold cyan]2[/bold cyan]. 增强扫描：Ping + ARP + 路由器设备名",
-            "[bold cyan]3[/bold cyan]. 仅从路由器同步设备列表",
+            "[bold cyan]3[/bold cyan]. 路由器设备名同步（实验）",
             "[bold cyan]4[/bold cyan]. 返回主菜单",
         ]
     )
@@ -192,7 +192,7 @@ def build_lan_discovery_menu() -> Panel:
 
 
 def show_enhanced_lan_discovery() -> None:
-    """Run LAN scan and optionally merge Xiaomi router device names."""
+    """Run LAN scan and optionally merge router device names."""
     scan_devices = run_lan_scan()
     if scan_devices is None:
         return
@@ -211,7 +211,7 @@ def show_enhanced_lan_discovery() -> None:
 
 
 def show_router_only_device_sync() -> None:
-    """Fetch router devices without ping scanning."""
+    """Fetch router devices without ping scanning when a supported adapter is selected."""
     router_devices = prompt_and_fetch_xiaomi_router_devices()
     if router_devices is None:
         return
@@ -876,7 +876,56 @@ def normalize_router_admin_url(value: str) -> str | None:
 
 
 def prompt_and_fetch_xiaomi_router_devices() -> list[RouterDevice] | None:
-    """Prompt for Xiaomi router URL and fetch device list."""
+    """Prompt for router sync method and fetch device list when supported."""
+    method = choose_router_sync_method()
+    if method == "xiaomi-redmi":
+        return prompt_and_fetch_xiaomi_redmi_stok_devices()
+    if method == "generic-luci":
+        show_generic_luci_sync_notice()
+    return None
+
+
+def choose_router_sync_method() -> str | None:
+    """Let the user choose a router device-name sync method."""
+    table = Table(title="请选择路由器同步方式")
+    table.add_column("#", justify="right")
+    table.add_column("方式", style="bold cyan")
+    table.add_column("说明")
+    table.add_row("1", "小米/Redmi stok API", "登录后 URL 通常包含 ;stok=xxxx")
+    table.add_row("2", "通用 LuCI/OpenWrt 后台", "暂不支持自动同步，仅显示说明")
+    table.add_row("3", "返回", "返回上一级菜单")
+    console.print(table)
+    choice = Prompt.ask("请选择路由器同步方式", choices=["1", "2", "3"], default="3")
+    if choice == "1":
+        return "xiaomi-redmi"
+    if choice == "2":
+        return "generic-luci"
+    return None
+
+
+def show_generic_luci_sync_notice() -> None:
+    """Explain generic LuCI/OpenWrt sync limitations."""
+    console.print("[yellow]检测到的后台可能是 LuCI/OpenWrt/厂商定制页面。[/yellow]")
+    console.print("[yellow]这类后台通常不一定使用 ;stok=。[/yellow]")
+    console.print("[yellow]当前 netwatch-cli 不读取浏览器 Cookie，也不绕过登录。[/yellow]")
+    console.print("[yellow]因此暂不支持自动同步设备名。[/yellow]")
+    console.print("[yellow]请使用“快速扫描：Ping + ARP”获取 IP/MAC。[/yellow]")
+    console.print("[yellow]未来可以为具体品牌/型号增加只读适配器。[/yellow]")
+
+
+def print_missing_stok_guidance(pasted_url: str) -> None:
+    """Print guidance when a Xiaomi/Redmi stok URL was expected but not found."""
+    console.print("[red]未检测到 ;stok= token。[/red]")
+    console.print("[yellow]该同步方式仅适用于小米/Redmi 路由器登录后的 URL，例如：[/yellow]")
+    console.print("[dim]http://192.168.31.1/cgi-bin/luci/;stok=xxxx/web/home[/dim]")
+    console.print(f"[dim]你当前粘贴的 URL：{pasted_url or '-'}[/dim]")
+    console.print("[yellow]你当前粘贴的 URL 看起来可能是普通 LuCI/OpenWrt/厂商后台。[/yellow]")
+    console.print("[yellow]请返回并选择：通用 LuCI/OpenWrt 后台（暂不支持自动同步）[/yellow]")
+    console.print("[yellow]或使用：快速扫描：Ping + ARP。[/yellow]")
+
+
+def prompt_and_fetch_xiaomi_redmi_stok_devices() -> list[RouterDevice] | None:
+    """Prompt for Xiaomi/Redmi stok URL and fetch device list."""
     global LAST_ROUTER_DEVICES
     gateway = get_default_gateway()
     if not gateway:
@@ -886,12 +935,14 @@ def prompt_and_fetch_xiaomi_router_devices() -> list[RouterDevice] | None:
         return
 
     console.print(f"[bold]路由器地址：[/bold]{gateway}")
-    console.print("[dim]请先在浏览器登录小米路由器后台。[/dim]")
+    console.print("[dim]当前自动同步仅支持小米/Redmi 路由器的 stok API。[/dim]")
+    console.print("[dim]其他 LuCI/OpenWrt/厂商后台可能没有 ;stok=，暂不支持自动同步。[/dim]")
+    console.print("[dim]请先在浏览器登录小米/Redmi 路由器后台。[/dim]")
     console.print("[dim]登录后复制浏览器地址栏中的完整 URL，URL 通常包含 ;stok=xxxx。[/dim]")
-    pasted_url = Prompt.ask("请粘贴登录后的 URL").strip()
+    pasted_url = Prompt.ask("请粘贴小米/Redmi 登录后的 URL").strip()
     stok = extract_xiaomi_stok(pasted_url)
     if not stok:
-        console.print("[red]未能从输入中提取 ;stok= token。[/red]")
+        print_missing_stok_guidance(pasted_url)
         return None
 
     console.print(f"[dim]stok: {mask_stok(stok)}[/dim]")

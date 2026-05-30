@@ -9,11 +9,69 @@ from netwatch.router import (
 )
 
 
+def test_xiaomi_redmi_stok_missing_guidance_for_generic_luci_url(monkeypatch, capsys) -> None:
+    from netwatch import cli
+
+    monkeypatch.setattr(cli, "get_default_gateway", lambda: "192.168.1.1")
+    monkeypatch.setattr(
+        cli.Prompt,
+        "ask",
+        lambda *args, **kwargs: "http://192.168.1.1/cgi-bin/luci/admin/bandwidth",
+    )
+    monkeypatch.setattr(
+        cli,
+        "fetch_xiaomi_device_list",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("API must not be called")),
+    )
+
+    result = cli.prompt_and_fetch_xiaomi_redmi_stok_devices()
+
+    output = capsys.readouterr().out
+    assert result is None
+    assert "未检测到 ;stok=" in output
+    assert "仅适用于小米/Redmi" in output
+    assert "普通 LuCI/OpenWrt/厂商后台" in output
+    assert "快速扫描：Ping + ARP" in output
+
+
+def test_generic_luci_option_only_shows_notice(monkeypatch, capsys) -> None:
+    from netwatch import cli
+
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "2")
+    monkeypatch.setattr(
+        cli,
+        "fetch_xiaomi_device_list",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("API must not be called")),
+    )
+
+    result = cli.prompt_and_fetch_xiaomi_router_devices()
+
+    output = capsys.readouterr().out
+    assert result is None
+    assert "LuCI/OpenWrt/厂商定制页面" in output
+    assert "不读取浏览器 Cookie" in output
+    assert "暂不支持自动同步设备名" in output
+
+
+def test_router_sync_prompt_no_generic_misleading_xiaomi_copy(capsys) -> None:
+    from netwatch import cli
+
+    cli.show_generic_luci_sync_notice()
+
+    output = capsys.readouterr().out
+    assert "请先在浏览器登录小米路由器后台" not in output
+    assert "通用 LuCI/OpenWrt" not in output or "暂不支持自动同步" in output
+
+
 def test_extract_xiaomi_stok() -> None:
     assert extract_xiaomi_stok("http://192.168.31.1/cgi-bin/luci/;stok=abc/web/home") == "abc"
     assert extract_xiaomi_stok("http://192.168.31.1/cgi-bin/luci/;stok=abc/web/home#router") == "abc"
     assert extract_xiaomi_stok("http://192.168.31.1/cgi-bin/luci/;stok=abc/api/misystem/status") == "abc"
     assert extract_xiaomi_stok("http://192.168.31.1/cgi-bin/luci/web/home") is None
+
+
+def test_extract_xiaomi_redmi_stok_url_still_works() -> None:
+    assert extract_xiaomi_stok("http://192.168.31.1/cgi-bin/luci/;stok=abc123/web/home") == "abc123"
 
 
 def test_normalize_xiaomi_device_ip_string_and_name() -> None:

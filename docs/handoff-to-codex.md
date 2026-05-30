@@ -68,7 +68,7 @@
 | `netwatch/config.py` | `~/.netwatch/config.json` 配置读写，仅保存非敏感信息（Ookla server id/name/location/interface、LibreSpeed URL/path/duration） |
 | `netwatch/network_info.py` | 网卡识别、物理接口选择、TUN/utun/198.18.0.0/15 过滤 |
 | `netwatch/proxy_probe.py` | 当前 CLI 公网出口 IP 检测（ipinfo.io） |
-| `netwatch/router.py` | 默认网关、路由器后台 URL、小米 LuCI API、设备合并 |
+| `netwatch/router.py` | 默认网关、通用路由器后台 URL、小米/Redmi stok API、设备合并 |
 | `netwatch/scanner.py` | 局域网扫描、ARP/MAC/hostname |
 | `netwatch/speed.py` | 实时网卡流量采样 |
 | `netwatch/speedtest_backends/models.py` | `SpeedtestResult` 数据结构 |
@@ -125,6 +125,7 @@
 - **不要重新加入手动录入 speedtest.cn 结果**。这个功能已被删除，体验差且无自动化价值。
 - **真实公网测速不要放进单元测试**，测试必须 mock。
 - **涉及公网 IP、stok、token、cookie 的内容不要落盘**。`~/.netwatch/config.json` 只能保存非敏感配置。
+- **路由器同步边界**：路由器管理后台打开是通用功能；自动设备名同步目前仅支持小米/Redmi stok API。GSWIFI / OpenWrt / LuCI / 其他厂商后台可能没有 `;stok=`，当前不读取浏览器 Cookie、不绕过登录、不逆向厂商后台私有接口。非小米路由器优先使用“快速扫描：Ping + ARP”，未来可按品牌/型号增加只读适配器。
 - **每次改动后运行**：
   ```bash
   source .venv/bin/activate
