@@ -1007,10 +1007,12 @@ def test_speedtest_ctrl_c_cancels_current_task() -> None:
     assert result is None
 
 
-def test_build_advanced_menu_contains_librespeed_before_speedtest_cn() -> None:
+def test_build_advanced_menu_contains_general_diagnosis_first() -> None:
     from netwatch.cli import build_advanced_menu
 
     rendered = build_advanced_menu().renderable
 
+    assert "通用测速诊断（Ookla / LibreSpeed / Python fallback）" in rendered
     assert "LibreSpeed 自定义服务器列表测速" in rendered
-    assert rendered.index("LibreSpeed 自定义服务器列表测速") < rendered.index("speedtest.cn")
+    assert rendered.index("通用测速诊断") < rendered.index("LibreSpeed")
+    assert "实验：自动浏览器测速" not in rendered

@@ -21,26 +21,28 @@
 
 当前包版本请以 `pyproject.toml` / `netwatch/__init__.py` 为准；V0.10 实验功能已实现但不作为稳定后端。最近提交：
 
+后续由 DeepSeek 接手，详见 `docs/handoff-to-deepseek.md`。
+
 ```
 27e097d refactor: Remove manual speedtest.cn entry, reorganize advanced menu
 0ce4b93 fix: Improve ISP preset keywords and add targeted speedtest quality advice
 ```
 
-## 2. 当前高级功能菜单
+## 2. 当前高级功能菜单（V0.10.4 重构后）
 
 ```
-1. 指定 Ookla server id 测速
-2. 按关键词筛选 Ookla 服务器测速
-3. 按当前运营商/城市优选服务器
-4. 保存最近一次成功测速服务器为默认
-5. 清除默认测速服务器
-6. 查看当前测速配置
-7. 显示最近一次测速摘要
-8. 显示测速后端信息
-9. 显示 Ookla server selection details
-10. LibreSpeed 自定义服务器列表测速
-11. 打开 speedtest.cn 网页对照测速
-12. 实验：自动浏览器测速 speedtest.cn
+1. 通用测速诊断（Ookla / LibreSpeed / Python fallback）
+2. 指定 Ookla server id 测速
+3. 按关键词筛选 Ookla 服务器测速
+4. 按当前运营商/城市优选服务器
+5. 保存最近一次成功测速服务器为默认
+6. 清除默认测速服务器
+7. 查看当前测速配置
+8. 显示最近一次测速摘要
+9. 显示测速后端信息
+10. 显示 Ookla server selection details
+11. LibreSpeed 自定义服务器列表测速
+12. 打开 speedtest.cn 网页对照测速
 13. 返回主菜单
 ```
 
@@ -52,7 +54,8 @@
 - **Python speedtest-cli**：仅作为 fallback（`netwatch/speedtest_backends/python_speedtest.py`），结果可能偏低，已标注提示。
 - **LibreSpeed CLI**：开源备选后端（`netwatch/speedtest_backends/librespeed_cli.py`），V0.9 支持 `--server-json <url>` / `--local-json <file>` 自定义服务器列表，可保存常用配置。公共节点质量不保证，自建节点最可靠。
 - **speedtest.cn 网页对照**：只是打开网页，**不是 CLI 后端**。不使用、不调用、不抓包、不逆向 speedtest.cn 私有 API。未来如有 speedtest.cn 官方 SDK/API 授权，可作为独立后端接入。
-- **Playwright 自动浏览器测速**：V0.10 实验功能，设计见 `docs/speedtest-cn-browser-automation.md`。只允许模拟用户打开网页、点击测速并读取 DOM 文本；不抓包、不调用私有 API、不绕过验证码/风控；只放在高级功能实验入口，不接入默认“带宽测速”。
+- **speedtest.cn browser automation**（主菜单 4）：V0.10.4 已提升为主菜单“宽带测速”默认入口。使用 Playwright 后台打开 `speedtest.cn`、点击测速并读取 DOM 文本，为普通用户输出简洁表格（不含 Result confidence、网络路径分析、VPN/TUN）。不抓包、不调用私有 API、不绕过验证码/风控。仍为实验性质（依赖页面结构），不是官方 API 后端。失败时不自动 fallback 到 Ookla。
+- **通用测速诊断**（高级功能第 1 项）：原来的 `run_best_speedtest()` 多后端 fallback，Ookla / LibreSpeed / Python fallback 按优先级依次尝试，保留完整诊断信息（Result confidence、网络路径分析、VPN/TUN 检测、质量诊断建议等）。
 - **CLI 调试边界**：当前用户入口不提供可见浏览器或 screenshot 选项；如未来需要 debug，应作为开发者模式重新设计。
 - **iperf3 / HTTP file download test**：后续更现实的可控测速方向。
 

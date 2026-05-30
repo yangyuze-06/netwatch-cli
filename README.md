@@ -52,7 +52,7 @@ python -m netwatch.cli
 1. 查看实时网卡流量
 2. 查看本机网络信息
 3. 局域网设备发现
-4. 带宽测速
+4. 宽带测速（speedtest.cn）
 5. 代理/当前出口测速
 6. 打开路由器管理后台
 7. 高级功能
@@ -69,7 +69,9 @@ python -m netwatch.cli
 2. `librespeed-cli`：开源备选后端，支持自定义 `server-json` URL 或本地 `local-json` 文件。
 3. `python-speedtest-cli`：Python 社区版 fallback，结果可能低于浏览器测速或官方客户端。
 
-普通“带宽测速”会尽量选择真实 LAN/Wi-Fi 网卡，例如 macOS 上的 `en0` / `en1`，并避开 `utun`、`tun`、`tap`、`198.18.0.0/15` 等 TUN/VPN 或虚拟出口。
+普通“宽带测速（speedtest.cn）”使用基于 Playwright 的 browser automation，在后台打开 `speedtest.cn` 网页模拟测速，为普通用户提供接近网页测速体验的结果。
+
+“通用测速诊断”（高级功能第 1 项）保留了原始的多后端 fallback 逻辑，会尽量选择真实 LAN/Wi-Fi 网卡，例如 macOS 上的 `en0` / `en1`，并避开 `utun`、`tun`、`tap`、`198.18.0.0/15` 等 TUN/VPN 或虚拟出口。
 
 “代理/当前出口测速”会保留当前 CLI 进程实际出口，先显示公网出口信息，再调用最佳可用后端测速。公网 IP 只用于诊断展示，不会保存。
 
@@ -81,7 +83,7 @@ Ookla、LibreSpeed 和 `speedtest.cn` 的服务器池不同。某个后端测速
 
 `speedtest.cn` 只作为网页对照入口。本项目不逆向 `speedtest.cn` 私有 API，不抓取隐藏接口，也不支持手动粘贴测速结果回填。
 
-V0.10 增加了实验功能：`speedtest.cn` browser automation。当前 CLI 入口只提供后台 headless 实验测速，不打开可见浏览器窗口，也不保存截图；debug / 可见浏览器 / screenshot 交互不再暴露给普通用户。它会打开网页、点击测速并从 DOM 文本读取结果，但不等同于官方 API 后端，不抓包、不读取 Cookie、不逆向私有接口，也不会进入默认带宽测速主流程。当前稳定后端仍是 Ookla / LibreSpeed / Python fallback。
+V0.10 增加了 `speedtest.cn` browser automation。V0.10.4 已将其提升为主菜单"宽带测速"默认入口，为普通用户提供接近网页测速体验的简洁结果（Source / Server / Location / Ping / Jitter / Download / Upload）。该功能会在后台 headless 浏览器中打开 `speedtest.cn`、点击测速并从 DOM 文本读取结果，但不等同于官方 API 后端，不抓包、不读取 Cookie、不逆向私有接口。
 
 `speedtest.cn` 开始测速前可能出现页面内提醒弹窗，实验功能会尝试点击“不再提醒”或“继续测速”。地理位置权限和默认模拟位置属于浏览器自动化内部实现细节，用于避免权限弹窗阻塞测速；普通用户路径不会显示这些细节，也不会读取或保存用户真实位置。
 
@@ -143,8 +145,11 @@ git diff --check
 
 - [Codex handoff](docs/handoff-to-codex.md)
 - [Claude handoff](docs/handoff-to-claude.md)
+- [DeepSeek handoff](docs/handoff-to-deepseek.md)
 - [V0.8.2 plan](docs/v0.8.2-plan.md)
 - [V0.8.3 plan](docs/v0.8.3-plan.md)
 - [V0.9 plan](docs/v0.9-plan.md)
 - [V0.9.3 plan](docs/v0.9.3-plan.md)
 - [speedtest.cn browser automation experiment](docs/speedtest-cn-browser-automation.md)
+
+后续由 DeepSeek 接手，详见 [DeepSeek handoff](docs/handoff-to-deepseek.md)。

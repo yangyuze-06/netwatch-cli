@@ -27,30 +27,29 @@ git diff --check
 
 ## 当前重点
 
-- 稳定 official Ookla CLI 后端。
-- 处理 Ookla 服务器选择不佳。
-- 保存常用 server id。
-- 支持 LibreSpeed custom server list，并说明公共节点质量不保证。
-- 做测速结果质量诊断。
-- 保留 Python speedtest-cli fallback，但明确提示结果可能偏低。
-- 维护 V0.10 `speedtest.cn` browser automation 实验功能，但不作为稳定后端。
+- 主菜单 4 使用 `speedtest.cn` browser automation 作为默认带宽测速入口。
+- 保持高级功能第 1 项"通用测速诊断"的 Ookla / LibreSpeed / Python fallback 可用。
+- 普通用户入口输出简洁，高级用户入口保留完整诊断。
+- `speedtest.cn` browser automation 失败时不自动 fallback 到 Ookla。
+- 不逆向 speedtest.cn 私有 API。
 
 ## 接手前必读
 
 - `README.md`
+- `AGENTS.md`
 - `docs/handoff-to-codex.md`
-- `docs/handoff-to-claude.md`
-- `docs/v0.8.2-plan.md`
-- `docs/v0.8.3-plan.md`
-- `docs/v0.9-plan.md`
+- `docs/handoff-to-deepseek.md`
 - `docs/speedtest-cn-browser-automation.md`
+
+后续由 DeepSeek 接手，详见 `docs/handoff-to-deepseek.md`。
 
 ## 当前禁止
 
 - 不要重新加入 speedtest.cn 手动录入/粘贴结果功能（已删除）。
 - 不要逆向 speedtest.cn 私有 API。
 - 不要把 speedtest.cn browser automation 当成官方 API 后端。
-- 不要为了实验功能引入默认主菜单入口或强制 Playwright 依赖。
 - 不要让默认测试真实访问 speedtest.cn 或真实启动浏览器，必须 mock。
 - 不要提交 `~/.netwatch/debug/` screenshot。
 - 不要大重构。
+- 不要修改 `run_best_speedtest()` / `show_auto_speedtest()` 的后端实现逻辑。
+- 不要让主菜单 4 在 speedtest.cn 失败时自动 fallback 到 Ookla。

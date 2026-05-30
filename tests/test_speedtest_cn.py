@@ -216,13 +216,14 @@ Ping 8 ms
     assert result.upload_MBps == 5
 
 
-def test_build_advanced_menu_contains_experimental_speedtest_cn_entry() -> None:
+def test_build_advanced_menu_contains_general_diagnosis_entry() -> None:
     from netwatch.cli import build_advanced_menu
 
     rendered = build_advanced_menu().renderable
 
-    assert "12[/bold cyan]. 实验：自动浏览器测速 speedtest.cn" in rendered
+    assert "1[/bold cyan]. 通用测速诊断（Ookla / LibreSpeed / Python fallback）" in rendered
     assert "13[/bold cyan]. 返回主菜单" in rendered
+    assert "实验：自动浏览器测速" not in rendered
 
 
 def test_show_speedtest_cn_browser_automation_cancel_does_not_run(monkeypatch) -> None:
@@ -439,3 +440,114 @@ def test_speedtest_cn_browser_cli_headless_http2_error_does_not_retry_visible_br
     assert "ERR_HTTP2_PROTOCOL_ERROR" in output
     assert "是否切换到可见浏览器调试模式重试" not in output
     assert "Debug mode enabled" not in output
+
+
+# --- Tests for show_speedtest_cn_main() (main menu item 4) ---
+
+
+def run_speedtest_cn_main_with_answers(monkeypatch, answers, result=None):
+    """Helper: run show_speedtest_cn_main with mocked answers and optional result."""
+    from netwatch import cli as cli_mod
+
+    calls = []
+    prompts = []
+    answer_iter = iter(answers)
+
+    def fake_prompt(prompt, *args, **kwargs):
+        prompts.append(prompt)
+        return next(answer_iter)
+
+    monkeypatch.setattr(cli_mod.Prompt, "ask", fake_prompt)
+
+    def fake_run(options, progress_callback=None):
+        calls.append(options)
+        if progress_callback is not None:
+            progress_callback("已打开 speedtest.cn")
+        if result is not None:
+            return result
+        return SpeedtestCnResult(download_mbps=1, upload_mbps=1, ping_ms=1)
+
+    monkeypatch.setattr(cli_mod, "run_speedtest_cn_browser_automation", fake_run)
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=140)
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        cli_mod.show_speedtest_cn_main()
+    finally:
+        cli_mod.console = original_console
+    return calls, buf.getvalue(), prompts
+
+
+def test_show_speedtest_cn_main_cancel_does_not_run(monkeypatch) -> None:
+    """Main menu speedtest.cn: cancel should not run the browser automation."""
+    from netwatch import cli as cli_mod
+
+    called = []
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: "n")
+    monkeypatch.setattr(cli_mod, "run_speedtest_cn_browser_automation", lambda options: called.append(options))
+
+    cli_mod.show_speedtest_cn_main()
+
+    assert called == []
+
+
+def test_show_speedtest_cn_main_prints_simplified_result(monkeypatch) -> None:
+    """Main menu speedtest.cn success output must use simplified table without advanced diagnostics."""
+    from netwatch.speedtest_cn import SpeedtestCnResult
+
+    result = SpeedtestCnResult(
+        download_mbps=717.68,
+        upload_mbps=64.2,
+        ping_ms=8,
+        jitter_ms=2.44,
+        server_name="广东移动_Vixtel_1",
+        location="广州移动",
+    )
+
+    calls, output, _ = run_speedtest_cn_main_with_answers(monkeypatch, ["y"], result=result)
+
+    assert calls
+    assert calls[0].headless is True
+    assert "宽带测速结果" in output
+    assert "717.68 Mbps / 89.71 MB/s" in output
+    assert "来源：speedtest.cn 浏览器自动化实验结果，非官方 API。" in output
+
+
+def test_show_speedtest_cn_main_no_advanced_diagnostics(monkeypatch) -> None:
+    """Main menu speedtest.cn must NOT output Result confidence, network path, or VPN/TUN."""
+    result = SpeedtestCnResult(
+        download_mbps=717.68,
+        upload_mbps=64.2,
+        ping_ms=8,
+        jitter_ms=2.44,
+        server_name="广东移动_Vixtel_1",
+        location="广州移动",
+    )
+
+    _, output, _ = run_speedtest_cn_main_with_answers(monkeypatch, ["y"], result=result)
+
+    assert "Result confidence" not in output
+    assert "网络路径分析" not in output
+    assert "VPN/TUN" not in output
+    assert "server pool" not in output
+    assert "confidence" not in output.lower() or "Result confidence" not in output
+    assert "headless" not in output
+    assert "debug_screenshot" not in output
+    assert "geolocation" not in output
+    assert "模拟位置" not in output
+
+
+def test_show_speedtest_cn_main_error_no_ookla_fallback(monkeypatch) -> None:
+    """Main menu speedtest.cn failure must NOT fallback to Ookla."""
+    error_result = SpeedtestCnResult(error="speedtest.cn 在 headless Chromium 下访问失败：ERR_HTTP2_PROTOCOL_ERROR。")
+
+    calls, output, prompts = run_speedtest_cn_main_with_answers(monkeypatch, ["y"], result=error_result)
+
+    assert len(calls) == 1
+    assert "speedtest.cn 浏览器自动化测速失败" in output
+    assert "ERR_HTTP2_PROTOCOL_ERROR" in output
+    assert "可尝试：重新运行、使用高级功能里的通用测速诊断" in output
+    # Should NOT suggest Ookla directly or auto-fallback
+    assert "Ookla CLI" not in output
+    assert "自动 fallback" not in output.lower()

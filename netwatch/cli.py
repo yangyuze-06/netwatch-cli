@@ -79,7 +79,7 @@ def build_menu() -> Panel:
             "[bold cyan]1[/bold cyan]. 查看实时网卡流量",
             "[bold cyan]2[/bold cyan]. 查看本机网络信息",
             "[bold cyan]3[/bold cyan]. 局域网设备发现",
-            "[bold cyan]4[/bold cyan]. 带宽测速",
+            "[bold cyan]4[/bold cyan]. 宽带测速（speedtest.cn）",
             "[bold cyan]5[/bold cyan]. 代理/当前出口测速",
             "[bold cyan]6[/bold cyan]. 打开路由器管理后台",
             "[bold cyan]7[/bold cyan]. 高级功能",
@@ -720,6 +720,69 @@ def compact_speedtest_cn_error(error: str) -> str:
     return first_line
 
 
+def show_speedtest_cn_main() -> None:
+    """Run speedtest.cn browser automation as the main bandwidth test (simplified output)."""
+    console.print("[yellow]宽带测速将使用 speedtest.cn 浏览器自动化实验功能，尽量模拟普通网页测速体验。[/yellow]")
+    console.print("[yellow]本功能不调用 speedtest.cn 私有 API，页面结构变化可能导致失败。[/yellow]")
+    try:
+        continue_choice = Prompt.ask("是否继续？", choices=["y", "n"], default="n")
+        if continue_choice.lower() != "y":
+            console.print("[yellow]已取消测速。[/yellow]")
+            return
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已取消测速，返回主菜单。[/yellow]")
+        return
+
+    options = BrowserAutomationOptions(
+        headless=True,
+        timeout_seconds=90,
+        debug_screenshot=False,
+    )
+
+    def show_progress(message: str) -> None:
+        console.print(f"[dim]{message}[/dim]")
+
+    console.print("[dim]正在执行 speedtest.cn 后台测速，请稍候...[/dim]")
+
+    try:
+        with console.status("[bold green]speedtest.cn browser automation 进行中...[/bold green]"):
+            result = run_speedtest_cn_browser_automation(options, progress_callback=show_progress)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已取消测速，返回主菜单。[/yellow]")
+        return
+
+    print_main_speedtest_cn_result(result)
+
+
+def print_main_speedtest_cn_result(result: SpeedtestCnResult) -> None:
+    """Print a simplified speedtest.cn result for the main menu (no advanced diagnostics)."""
+    if result.error:
+        short_error = compact_speedtest_cn_error(result.error)
+        console.print(f"[red]speedtest.cn 浏览器自动化测速失败：{short_error}[/red]")
+        console.print("[yellow]可尝试：重新运行、使用高级功能里的通用测速诊断，或打开 speedtest.cn 网页对照测速。[/yellow]")
+        return
+
+    table = Table(title="宽带测速结果")
+    table.add_column("Source", style="bold cyan")
+    table.add_column("Server")
+    table.add_column("Location")
+    table.add_column("Ping", justify="right")
+    table.add_column("Jitter", justify="right")
+    table.add_column("Download", justify="right")
+    table.add_column("Upload", justify="right")
+    table.add_row(
+        result.source,
+        format_speedtest_cn_label(result.server_name),
+        format_speedtest_cn_label(result.location),
+        format_optional_ms(result.ping_ms),
+        format_optional_ms(result.jitter_ms),
+        format_bandwidth(result.download_mbps, result.download_MBps),
+        format_bandwidth(result.upload_mbps, result.upload_MBps),
+    )
+    console.print(table)
+    console.print("[dim]来源：speedtest.cn 浏览器自动化实验结果，非官方 API。[/dim]")
+
+
 def format_speedtest_cn_label(value: str | None) -> str:
     """Format optional speedtest.cn metadata labels without leaking UI noise."""
     return value if is_valid_speedtest_cn_label(value) else "-"
@@ -1100,18 +1163,18 @@ def build_advanced_menu() -> Panel:
     """Build advanced feature menu."""
     menu = "\n".join(
         [
-            "[bold cyan]1[/bold cyan]. 指定 Ookla server id 测速",
-            "[bold cyan]2[/bold cyan]. 按关键词筛选 Ookla 服务器测速",
-            "[bold cyan]3[/bold cyan]. 按当前运营商/城市优选服务器",
-            "[bold cyan]4[/bold cyan]. 保存最近一次成功测速服务器为默认",
-            "[bold cyan]5[/bold cyan]. 清除默认测速服务器",
-            "[bold cyan]6[/bold cyan]. 查看当前测速配置",
-            "[bold cyan]7[/bold cyan]. 显示最近一次测速摘要",
-            "[bold cyan]8[/bold cyan]. 显示测速后端信息",
-            "[bold cyan]9[/bold cyan]. 显示 Ookla server selection details",
-            "[bold cyan]10[/bold cyan]. LibreSpeed 自定义服务器列表测速",
-            "[bold cyan]11[/bold cyan]. 打开 speedtest.cn 网页对照测速",
-            "[bold cyan]12[/bold cyan]. 实验：自动浏览器测速 speedtest.cn",
+            "[bold cyan]1[/bold cyan]. 通用测速诊断（Ookla / LibreSpeed / Python fallback）",
+            "[bold cyan]2[/bold cyan]. 指定 Ookla server id 测速",
+            "[bold cyan]3[/bold cyan]. 按关键词筛选 Ookla 服务器测速",
+            "[bold cyan]4[/bold cyan]. 按当前运营商/城市优选服务器",
+            "[bold cyan]5[/bold cyan]. 保存最近一次成功测速服务器为默认",
+            "[bold cyan]6[/bold cyan]. 清除默认测速服务器",
+            "[bold cyan]7[/bold cyan]. 查看当前测速配置",
+            "[bold cyan]8[/bold cyan]. 显示最近一次测速摘要",
+            "[bold cyan]9[/bold cyan]. 显示测速后端信息",
+            "[bold cyan]10[/bold cyan]. 显示 Ookla server selection details",
+            "[bold cyan]11[/bold cyan]. LibreSpeed 自定义服务器列表测速",
+            "[bold cyan]12[/bold cyan]. 打开 speedtest.cn 网页对照测速",
             "[bold cyan]13[/bold cyan]. 返回主菜单",
         ]
     )
@@ -1123,35 +1186,37 @@ def show_advanced_menu() -> None:
     while True:
         try:
             console.print(build_advanced_menu())
+            console.print("[yellow]通用测速诊断会依次尝试 official Ookla CLI、LibreSpeed CLI、Python speedtest-cli fallback。[/yellow]")
+            console.print("[yellow]该结果受测速服务器池、网络路径、代理/TUN 和服务器质量影响，不一定代表本地宽带最大值。[/yellow]")
             choice = Prompt.ask(
                 "请选择高级功能",
                 choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"],
                 default="13",
             )
             if choice == "1":
-                show_speedtest_by_server_id()
+                show_auto_speedtest()
             elif choice == "2":
-                show_keyword_speedtest()
+                show_speedtest_by_server_id()
             elif choice == "3":
-                show_isp_city_preset_speedtest()
+                show_keyword_speedtest()
             elif choice == "4":
-                show_save_last_speedtest_server()
+                show_isp_city_preset_speedtest()
             elif choice == "5":
-                show_clear_preferred_speedtest()
+                show_save_last_speedtest_server()
             elif choice == "6":
-                show_speedtest_config()
+                show_clear_preferred_speedtest()
             elif choice == "7":
-                show_last_speedtest_raw_summary()
+                show_speedtest_config()
             elif choice == "8":
-                show_speedtest_backend_info()
+                show_last_speedtest_raw_summary()
             elif choice == "9":
-                show_ookla_selection_details()
+                show_speedtest_backend_info()
             elif choice == "10":
-                show_librespeed_custom_menu()
+                show_ookla_selection_details()
             elif choice == "11":
-                open_speedtest_cn_reference()
+                show_librespeed_custom_menu()
             elif choice == "12":
-                show_speedtest_cn_browser_automation()
+                open_speedtest_cn_reference()
             elif choice == "13":
                 break
         except KeyboardInterrupt:
@@ -1173,7 +1238,7 @@ def main() -> None:
             elif choice == "3":
                 show_lan_discovery_menu()
             elif choice == "4":
-                show_auto_speedtest()
+                show_speedtest_cn_main()
             elif choice == "5":
                 show_proxy_exit_speedtest()
             elif choice == "6":
