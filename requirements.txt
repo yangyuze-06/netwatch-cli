@@ -1,4 +1,17 @@
-psutil>=5.9
-requests
-rich>=13.0
-speedtest-cli
+# Core CLI UI
+rich>=13.7.0
+
+# HTTP requests / API calls / download helpers
+requests>=2.31.0
+
+# Python fallback speedtest backend
+# This is NOT the official Ookla Speedtest CLI binary.
+speedtest-cli>=2.1.3
+
+# Browser automation for speedtest.cn
+# After installing this dependency, run:
+#   python -m playwright install chromium
+playwright>=1.44.0
+
+# Testing
+pytest>=8.0.0

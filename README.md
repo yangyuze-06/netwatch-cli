@@ -17,10 +17,23 @@
 
 ## Quick Start
 
+### Requirements
+
+- Python 3.10+。
+- macOS / Linux 终端环境。
+- 可选：官方 Ookla CLI 二进制 `speedtest`，用于更可靠的通用测速诊断。
+- 可选：Playwright Chromium，用于 `speedtest.cn` 浏览器自动化测速。
+- 可选：LibreSpeed CLI 二进制，用于 LibreSpeed 后端。
+
+### 从源码安装
+
 ```bash
+git clone https://github.com/yangyuze-06/netwatch-cli.git
+cd netwatch-cli
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -e .
 netwatch
 ```
 
@@ -31,21 +44,51 @@ source .venv/bin/activate
 python -m netwatch.cli
 ```
 
+### 使用 requirements.txt 安装依赖
+
+如果你想一次性安装运行和测试常用依赖：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e .
+netwatch
+```
+
+### speedtest.cn browser automation
+
 启用 `speedtest.cn` browser automation 需要可选依赖：
 
 ```bash
-pip install -e ".[browser]"
-playwright install chromium
+python -m pip install -e ".[browser]"
+python -m playwright install chromium
 ```
 
-macOS 如需官方 Ookla CLI：
+这会安装 Playwright Python 包，并下载用于后台网页测速的 Chromium。`speedtest.cn` 自动化只是模拟用户打开网页并点击测速，不是官方 API 后端。
+
+### macOS 可选外部工具
+
+如需官方 Ookla CLI：
 
 ```bash
 brew tap teamookla/speedtest
 brew install speedtest
 ```
 
-不要把 `brew install speedtest-cli` 当成官方 Ookla CLI；`speedtest-cli` 是 Python 社区版工具，Homebrew 已标记为 deprecated。
+注意：
+
+- `speedtest` = 官方 Ookla CLI 二进制。
+- `speedtest-cli` = Python 社区包，只作为 fallback backend。
+- 不要把 `speedtest-cli` 当成官方 Ookla CLI；`brew install speedtest-cli` 不是本项目推荐的官方 Ookla 安装方式。
+
+### Linux 说明
+
+- Python 依赖可通过 `venv + pip` 安装。
+- Playwright Chromium 通过 `python -m playwright install chromium` 安装。
+- Official Ookla CLI 需要按发行版从 Ookla 官方渠道安装，不由 `requirements.txt` 管理。
+- LibreSpeed CLI 是外部二进制，也不由 `requirements.txt` 管理。
 
 ## 使用
 
@@ -112,7 +155,13 @@ git diff --check
 
 ```text
 netwatch/                         核心代码
-  cli.py                          交互式 CLI 和展示逻辑
+  cli.py                          主菜单入口和顶层调度
+  cli_modules/                    CLI 展示与交互模块
+    common.py                     通用 console / 兼容 helper
+    speedtest.py                  测速相关 CLI 展示与交互
+    router.py                     路由器相关 CLI 展示与交互
+    lan.py                        局域网扫描相关 CLI 展示与交互
+    location.py                   定位相关 CLI 展示与交互
   config.py                       用户配置读写
   network_info.py                 本机网络和网卡识别
   proxy_probe.py                  当前公网出口检测
