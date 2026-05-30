@@ -22,6 +22,8 @@ DEFAULT_CONTEXT_OPTIONS = {
     "viewport": {"width": 1440, "height": 900},
     "locale": "zh-CN",
     "timezone_id": "Asia/Shanghai",
+    "geolocation": {"longitude": 113.2644, "latitude": 23.1291},
+    "permissions": ["geolocation"],
     "extra_http_headers": {"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"},
 }
 HEADLESS_HTTP2_RETRY_ARGS = [
@@ -100,6 +102,7 @@ def run_speedtest_cn_browser_attempt(
                 launch_kwargs["args"] = launch_args
             browser = playwright.chromium.launch(**launch_kwargs)
             context = browser.new_context(**DEFAULT_CONTEXT_OPTIONS)
+            grant_geolocation_permission(context)
             page = context.new_page()
             try:
                 page.goto(SPEEDTEST_CN_URL, wait_until="domcontentloaded", timeout=30_000)
@@ -115,6 +118,7 @@ def run_speedtest_cn_browser_attempt(
                     debug_screenshot_path=screenshot_path,
                 )
             dismiss_common_overlays(page)
+            dismiss_speedtest_cn_prompts(page)
 
             if not click_speedtest_button(page):
                 screenshot_path = save_debug_screenshot(page, options.debug_screenshot)
@@ -123,6 +127,7 @@ def run_speedtest_cn_browser_attempt(
                     error=append_screenshot_path("未找到 speedtest.cn 测速按钮。", screenshot_path),
                     debug_screenshot_path=screenshot_path,
                 )
+            dismiss_speedtest_cn_prompts(page)
 
             deadline = time.monotonic() + max(0, options.timeout_seconds)
             while time.monotonic() < deadline:
@@ -212,6 +217,29 @@ def dismiss_common_overlays(page: Any) -> None:
             page.get_by_text(text, exact=True).click(timeout=1_000)
         except Exception:
             continue
+
+
+def dismiss_speedtest_cn_prompts(page: Any) -> None:
+    """Dismiss known speedtest.cn in-page prompts without touching ads or CAPTCHA."""
+    for text in ("不再提醒", "继续测速"):
+        locator_factories = (
+            lambda text=text: page.get_by_text(text),
+            lambda text=text: first_locator(page.locator(f"text={text}")),
+        )
+        for locator_factory in locator_factories:
+            try:
+                locator_factory().click(timeout=2_000)
+                return
+            except Exception:
+                continue
+
+
+def grant_geolocation_permission(context: Any) -> None:
+    """Best-effort geolocation permission grant for the isolated Playwright context."""
+    try:
+        context.grant_permissions(["geolocation"], origin=SPEEDTEST_CN_URL.rstrip("/"))
+    except Exception:
+        pass
 
 
 def click_speedtest_button(page: Any) -> bool:

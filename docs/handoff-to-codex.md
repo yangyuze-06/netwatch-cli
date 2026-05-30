@@ -15,7 +15,7 @@
 - **保留以下高级功能**：指定 Ookla server id 测速、关键词筛选、运营商/城市预设、保存默认服务器、查看/清除测速配置、测速摘要、测速后端信息、Ookla selection details。
 - **新增测速质量诊断**：`get_speedtest_quality_details()` — 按触发条件（高 ping、高 jitter、丢包、低 download、TUN/VPN）返回针对性建议。
 - **新增 ISP 预设关键词优化**：`build_isp_preset_keywords()` — China Mobile 优先关键词不含 Hong Kong，Guangzhou/Guangdong 优先排序，Hong Kong 仅作为最后 fallback 并显示警告。
-- **最新验证**：V0.10 实验功能实现后 `pytest -q` / `python -m pytest -q` 均为 125 passed，`git diff --check` 通过。
+- **最新验证**：V0.10 实验功能实现后 `pytest -q` / `python -m pytest -q` 均为 130 passed，`git diff --check` 通过。
 - **README 和 docs/handoff-to-claude.md 已更新相关边界说明**。
 
 当前包版本请以 `pyproject.toml` / `netwatch/__init__.py` 为准；V0.10 实验功能已实现但不作为稳定后端。最近提交：

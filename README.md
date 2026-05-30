@@ -83,6 +83,8 @@ Ookla、LibreSpeed 和 `speedtest.cn` 的服务器池不同。某个后端测速
 
 V0.10 增加了实验功能：`speedtest.cn` browser automation。它默认以 `headless=True` 后台启动 Playwright/Chromium，不打开可见浏览器窗口；只在用户明确选择 debug 可见浏览器模式时才使用 `headless=False`。它会打开网页、点击测速并从 DOM 文本读取结果，但不等同于官方 API 后端，不抓包、不读取 Cookie、不逆向私有接口，也不会进入默认带宽测速主流程。当前稳定后端仍是 Ookla / LibreSpeed / Python fallback。
 
+`speedtest.cn` 开始测速前可能出现页面内提醒弹窗，实验功能会尝试点击“不再提醒”或“继续测速”。它还会给 Playwright browser context 授予 geolocation 权限，并使用默认模拟位置（广州）避免浏览器权限弹窗阻塞测速；不会读取或保存用户真实位置。
+
 启用该实验功能需要可选依赖：
 
 ```bash

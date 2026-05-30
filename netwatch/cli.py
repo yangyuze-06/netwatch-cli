@@ -654,6 +654,8 @@ def show_speedtest_cn_browser_automation() -> None:
     console.print("[yellow]这是实验功能，会启动后台浏览器访问 speedtest.cn。[/yellow]")
     console.print("[yellow]本功能不会调用 speedtest.cn 私有 API。[/yellow]")
     console.print("[yellow]页面结构变化、广告、验证码或反自动化策略可能导致失败。[/yellow]")
+    console.print("[dim]本实验会向浏览器上下文授予 speedtest.cn 地理位置权限，并使用默认模拟位置（广州）以避免浏览器权限弹窗阻塞测速。[/dim]")
+    console.print("[dim]不会读取或保存你的真实位置。[/dim]")
     console.print("[dim]默认将使用后台浏览器运行，不会打开可见窗口。[/dim]")
     console.print("[dim]如果需要观察页面行为，请选择 debug 可见浏览器模式。[/dim]")
     try:
@@ -751,7 +753,7 @@ def print_speedtest_cn_browser_result(result: SpeedtestCnResult) -> None:
             console.print("[yellow]Playwright 是可选依赖，安装后再运行实验功能：[/yellow]")
             console.print("[bold]pip install playwright[/bold]")
             console.print("[bold]playwright install chromium[/bold]")
-        console.print("[yellow]可能原因：页面结构变化、弹窗/广告遮挡、headless 浏览器被限制、测速未完成或 DOM 文本无法解析。[/yellow]")
+        console.print("[yellow]可能原因：页面内提醒弹窗未能自动关闭、浏览器地理位置权限或定位逻辑被页面限制、speedtest.cn 页面结构变化、headless 浏览器被限制、测速未完成或 DOM 文本无法解析。[/yellow]")
         console.print("[yellow]建议：使用可见浏览器调试，或改用 Ookla / LibreSpeed 后端。[/yellow]")
         return
 

@@ -9,8 +9,9 @@ class FakeTimeoutError(Exception):
 
 
 class FakeLocator:
-    def __init__(self, page=None, *, click_error: Exception | None = None):
+    def __init__(self, page=None, text=None, *, click_error: Exception | None = None):
         self.page = page
+        self.text = text
         self.click_error = click_error
 
     @property
@@ -23,6 +24,8 @@ class FakeLocator:
     def click(self, **kwargs):
         if self.click_error:
             raise self.click_error
+        if self.page is not None and self.text is not None:
+            self.page.clicked_texts.append(self.text)
 
     def inner_text(self, **kwargs):
         return self.page.next_body_text()
@@ -36,13 +39,17 @@ class FakePage:
         goto_error: BaseException | None = None,
         goto_errors: list[BaseException | None] | None = None,
         screenshot_error: Exception | None = None,
+        available_texts: set[str] | None = None,
     ):
         self.body_texts = body_texts or []
         self.goto_error = goto_error
         self.goto_errors = goto_errors
         self.screenshot_error = screenshot_error
+        self.available_texts = available_texts if available_texts is not None else {"测速", "开始测速"}
+        self.clicked_texts = []
         self.body_reads = 0
         self.screenshot_path = None
+        self.dismiss_prompt_calls = 0
 
     def goto(self, *args, **kwargs):
         if self.goto_errors is not None:
@@ -54,13 +61,18 @@ class FakePage:
             raise self.goto_error
 
     def get_by_text(self, text, **kwargs):
-        if text in {"测速", "开始测速"}:
-            return FakeLocator(self)
-        return FakeLocator(self, click_error=Exception("not found"))
+        if text in self.available_texts:
+            return FakeLocator(self, text=text)
+        return FakeLocator(self, text=text, click_error=Exception("not found"))
 
     def locator(self, selector):
         if selector == "body":
             return FakeLocator(self)
+        if selector.startswith("text="):
+            text = selector.removeprefix("text=")
+            if text in self.available_texts:
+                return FakeLocator(self, text=text)
+            return FakeLocator(self, text=text, click_error=Exception("not found"))
         return FakeLocator(self)
 
     def next_body_text(self):
@@ -81,12 +93,16 @@ class FakeContext:
     def __init__(self, page):
         self.page = page
         self.closed = False
+        self.grant_permissions_calls = []
 
     def new_page(self):
         return self.page
 
     def close(self):
         self.closed = True
+
+    def grant_permissions(self, permissions, **kwargs):
+        self.grant_permissions_calls.append((permissions, kwargs))
 
 
 class FakeBrowser:
@@ -198,7 +214,58 @@ def test_browser_automation_context_uses_desktop_locale_headers(monkeypatch) -> 
     assert context_kwargs["viewport"] == {"width": 1440, "height": 900}
     assert context_kwargs["locale"] == "zh-CN"
     assert context_kwargs["timezone_id"] == "Asia/Shanghai"
+    assert context_kwargs["geolocation"] == {"longitude": 113.2644, "latitude": 23.1291}
+    assert context_kwargs["permissions"] == ["geolocation"]
     assert context_kwargs["extra_http_headers"] == {"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"}
+    grant_calls = manager.playwright.chromium.browser.context.grant_permissions_calls
+    assert grant_calls == [(["geolocation"], {"origin": "https://www.speedtest.cn"})]
+
+
+def test_geolocation_uses_static_default_location_without_user_lookup() -> None:
+    assert browser_mod.DEFAULT_CONTEXT_OPTIONS["geolocation"] == {"longitude": 113.2644, "latitude": 23.1291}
+    assert browser_mod.DEFAULT_CONTEXT_OPTIONS["permissions"] == ["geolocation"]
+
+
+def test_dismiss_speedtest_cn_prompts_clicks_do_not_remind() -> None:
+    page = FakePage(available_texts={"不再提醒"})
+
+    browser_mod.dismiss_speedtest_cn_prompts(page)
+
+    assert page.clicked_texts == ["不再提醒"]
+
+
+def test_dismiss_speedtest_cn_prompts_falls_back_to_continue() -> None:
+    page = FakePage(available_texts={"继续测速"})
+
+    browser_mod.dismiss_speedtest_cn_prompts(page)
+
+    assert page.clicked_texts == ["继续测速"]
+
+
+def test_dismiss_speedtest_cn_prompts_missing_buttons_does_not_raise() -> None:
+    page = FakePage(available_texts=set())
+
+    browser_mod.dismiss_speedtest_cn_prompts(page)
+
+    assert page.clicked_texts == []
+
+
+def test_browser_automation_dismisses_prompts_before_and_after_speedtest_click(monkeypatch) -> None:
+    page = FakePage(["Download 10 Mbps\nUpload 2 Mbps\nPing 8 ms"])
+    install_fake_playwright(monkeypatch, page)
+    dismiss_calls = []
+
+    def fake_dismiss(prompt_page):
+        dismiss_calls.append(prompt_page)
+
+    monkeypatch.setattr(browser_mod, "dismiss_speedtest_cn_prompts", fake_dismiss)
+
+    result = browser_mod.run_speedtest_cn_browser_automation(
+        BrowserAutomationOptions(headless=True, timeout_seconds=3)
+    )
+
+    assert result.error is None
+    assert dismiss_calls == [page, page]
 
 
 def test_browser_automation_launches_visible_browser_when_headless_false(monkeypatch) -> None:

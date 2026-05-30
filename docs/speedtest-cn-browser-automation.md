@@ -43,10 +43,14 @@ CLI 场景中直接面对网页广告和复杂页面。
 - 默认 `headless=True` 后台运行，不打开可见浏览器窗口。
 - 只有用户明确选择 debug 可见浏览器模式时才使用 `headless=False`，方便观察页面行为。
 - Browser context 使用桌面 Chrome UA、`1440x900` viewport、`zh-CN` locale、`Asia/Shanghai` timezone 和 `Accept-Language` 头，尽量贴近普通桌面浏览器。
+- Browser context 授予 `geolocation` 权限，并使用默认模拟位置（广州：`113.2644, 23.1291`）避免浏览器地理位置权限弹窗阻塞测速。
+- 不读取、不保存用户真实位置。
 - 使用 `page.goto("https://www.speedtest.cn/")` 打开页面。
 - 如果 headless 首次访问出现 `ERR_HTTP2_PROTOCOL_ERROR`，自动以 `headless=True` 和兼容 launch args 重试一次。
+- 尝试处理 `speedtest.cn` 页面内测速提醒弹窗，只点击“不再提醒”或“继续测速”两个已知按钮。
 - 等待测速按钮出现。
 - 点击测速按钮。
+- 点击测速按钮后再次尝试处理页面内测速提醒弹窗。
 - 等待 20~90 秒，或等待结果文本稳定。
 - 使用 `page.locator("body").inner_text()` 读取 DOM 文本。
 - 用 parser 从文本提取测速结果。
@@ -155,7 +159,9 @@ Parser 支持从页面文本里解析：
 失败时应说明可能原因：
 
 - 页面结构变化。
+- 页面内提醒弹窗未能自动关闭。
 - 弹窗或广告遮挡。
+- 浏览器地理位置权限或定位逻辑被页面限制。
 - Headless 浏览器被限制。
 - `speedtest.cn` 页面/CDN/HTTP2 对 headless Chromium 不兼容，可能表现为 `ERR_HTTP2_PROTOCOL_ERROR`。
 - 测速未完成。
@@ -178,6 +184,7 @@ Parser 支持从页面文本里解析：
 - 不绕过验证码或风控。
 - 不保存 Cookie。
 - 不保存公网 IP。
+- 不读取、不保存用户真实地理位置；默认广州坐标只用于 Playwright context 模拟定位，避免权限弹窗阻塞。
 - 不高频循环测速。
 - 不作为官方 `speedtest.cn` 后端。
 - 不把浏览器自动化结果宣传为稳定、官方或可长期依赖。
