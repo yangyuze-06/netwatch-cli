@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import time
-import sys
 from pathlib import Path
 
-from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
@@ -49,19 +47,8 @@ from netwatch.speedtest_runner import (
     show_backend_info,
     summarize_speedtest_raw,
 )
+from netwatch.cli_modules.common import cli_override, console
 
-
-class ConsoleProxy:
-    """Use netwatch.cli.console when tests or callers replace it."""
-
-    def __getattr__(self, name: str):
-        cli_module = sys.modules.get("netwatch.cli")
-        active_console = getattr(cli_module, "console", None) if cli_module is not None else None
-        return getattr(active_console or _default_console, name)
-
-
-_default_console = Console()
-console = ConsoleProxy()
 SPEEDTEST_STATUS_MESSAGES = (
     "正在启动测速后端...",
     "正在连接测速服务器...",
@@ -71,42 +58,40 @@ SPEEDTEST_STATUS_MESSAGES = (
 )
 
 
-def _cli_override(name: str, default):
-    """Return a monkeypatched legacy netwatch.cli attribute when present."""
-    cli_module = sys.modules.get("netwatch.cli")
-    if cli_module is None:
-        return default
-    candidate = getattr(cli_module, name, None)
-    if candidate is None or candidate is globals().get(name):
-        return default
-    return candidate
-
-
 def get_preferred_physical_interface():
-    return _cli_override("get_preferred_physical_interface", _default_get_preferred_physical_interface)()
+    return cli_override(
+        "get_preferred_physical_interface",
+        _default_get_preferred_physical_interface,
+        current=get_preferred_physical_interface,
+    )()
 
 
 def probe_exit_ip():
-    return _cli_override("probe_exit_ip", _default_probe_exit_ip)()
+    return cli_override("probe_exit_ip", _default_probe_exit_ip, current=probe_exit_ip)()
 
 
 def run_best_speedtest(*args, **kwargs):
-    return _cli_override("run_best_speedtest", _default_run_best_speedtest)(*args, **kwargs)
+    return cli_override("run_best_speedtest", _default_run_best_speedtest, current=run_best_speedtest)(*args, **kwargs)
 
 
 def run_librespeed_custom_speedtest(*args, **kwargs):
-    return _cli_override("run_librespeed_custom_speedtest", _default_run_librespeed_custom_speedtest)(*args, **kwargs)
+    return cli_override(
+        "run_librespeed_custom_speedtest",
+        _default_run_librespeed_custom_speedtest,
+        current=run_librespeed_custom_speedtest,
+    )(*args, **kwargs)
 
 
 def run_speedtest_cn_browser_automation(*args, **kwargs):
-    return _cli_override(
+    return cli_override(
         "run_speedtest_cn_browser_automation",
         _default_run_speedtest_cn_browser_automation,
+        current=run_speedtest_cn_browser_automation,
     )(*args, **kwargs)
 
 
 def _print_speedtest_result(result: SpeedtestResult, detailed: bool = True) -> None:
-    printer = _cli_override("print_speedtest_result", print_speedtest_result)
+    printer = cli_override("print_speedtest_result", print_speedtest_result, current=print_speedtest_result)
     if printer is print_speedtest_result:
         printer(result, detailed=detailed)
     elif detailed:
