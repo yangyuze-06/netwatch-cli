@@ -28,8 +28,8 @@ git diff --check
 ## 当前重点
 
 - 主菜单 4 使用 `speedtest.cn` browser automation 作为默认带宽测速入口。
+- 主菜单 5 "代理/当前出口测速"默认简洁输出，完成后询问是否查看详细诊断；高级功能第 1 项继续完整诊断。
 - 保持高级功能第 1 项"通用测速诊断"的 Ookla / LibreSpeed / Python fallback 可用。
-- 普通用户入口输出简洁，高级用户入口保留完整诊断。
 - `speedtest.cn` browser automation 失败时不自动 fallback 到 Ookla。
 - 不逆向 speedtest.cn 私有 API。
 

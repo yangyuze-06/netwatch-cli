@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from rich.console import Console
@@ -10,7 +11,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
-from netwatch.analysis import analyze_speedtest_consistency, build_network_path_summary, get_result_confidence
+from netwatch.analysis import analyze_speedtest_consistency, build_network_path_summary, detect_vpn_tun, get_result_confidence
 from netwatch.config import (
     clear_preferred_librespeed,
     clear_preferred_speedtest,
@@ -112,21 +113,67 @@ def show_realtime_traffic() -> None:
 
 
 def show_network_info() -> None:
-    """Display local network interface information."""
-    interfaces = get_display_network_interfaces()
-    table = Table(title="本机网络信息")
-    table.add_column("网卡名称", style="bold cyan")
-    table.add_column("IPv4 地址")
-    table.add_column("MAC 地址")
+    """Display local network info and public exit location, with optional full interface list."""
+    # 1. Local network info
+    preferred = get_preferred_physical_interface()
+    gateway = get_default_gateway()
 
-    for interface in interfaces:
-        table.add_row(interface.name, interface.ipv4 or "-", interface.mac or "-")
+    preferred_mac: str | None = None
+    if preferred:
+        all_interfaces = get_display_network_interfaces()
+        for iface in all_interfaces:
+            if iface.name == preferred["name"]:
+                preferred_mac = iface.mac
+                break
 
-    if not interfaces:
-        console.print("[yellow]未找到可显示的网络接口。[/yellow]")
+    lan_table = Table(title="本机局域网信息")
+    lan_table.add_column("Field", style="bold cyan")
+    lan_table.add_column("Value")
+    if preferred:
+        lan_table.add_row("主要网卡", preferred["name"])
+        lan_table.add_row("IPv4 地址", preferred["ip"])
+        lan_table.add_row("MAC 地址", preferred_mac or "-")
+    else:
+        lan_table.add_row("主要网卡", "-")
+        lan_table.add_row("IPv4 地址", "-")
+        lan_table.add_row("MAC 地址", "-")
+    lan_table.add_row("默认网关", gateway or "-")
+    console.print(lan_table)
+
+    # 2. Public exit location
+    exit_info = probe_exit_ip()
+    exit_table = Table(title="当前公网出口")
+    exit_table.add_column("Field", style="bold cyan")
+    exit_table.add_column("Value")
+    if exit_info.error:
+        exit_table.add_row("信息", "未能获取当前公网出口信息。")
+    else:
+        exit_table.add_row("公网 IP", exit_info.ip or "-")
+        exit_table.add_row("国家/地区", exit_info.country or exit_info.region or "-")
+        exit_table.add_row("城市", exit_info.city or "-")
+        exit_table.add_row("ISP/组织", exit_info.org or "-")
+    console.print(exit_table)
+    console.print("[dim]该位置来自公网 IP 粗略定位。若使用 VPN/TUN/代理，显示的是代理出口位置，不代表真实所在地。[/dim]")
+
+    # 3. Ask about full interface details
+    try:
+        show_all = Prompt.ask("是否查看全部网卡详情？", choices=["y", "n"], default="n")
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已返回主菜单。[/yellow]")
         return
 
-    console.print(table)
+    if show_all.lower() == "y":
+        interfaces = get_display_network_interfaces()
+        if not interfaces:
+            console.print("[yellow]未找到可显示的网络接口。[/yellow]")
+            return
+        table = Table(title="全部网卡信息")
+        table.add_column("网卡名称", style="bold cyan")
+        table.add_column("IPv4 地址")
+        table.add_column("MAC 地址")
+        for iface in interfaces:
+            table.add_row(iface.name, iface.ipv4 or "-", iface.mac or "-")
+        console.print(table)
 
 
 def run_lan_scan() -> list[NetworkDevice] | None:
@@ -324,8 +371,15 @@ def run_speedtest_with_status(task) -> SpeedtestResult | None:
         return None
 
 
-def print_speedtest_result(result: SpeedtestResult) -> None:
-    """Print a unified speedtest result."""
+def print_speedtest_result(result: SpeedtestResult, detailed: bool = True) -> None:
+    """Print a unified speedtest result. detailed=True includes quality warnings + path analysis."""
+    print_speedtest_result_table(result)
+    if detailed:
+        print_speedtest_results_extra(result)
+
+
+def print_speedtest_result_table(result: SpeedtestResult) -> None:
+    """Print the basic speedtest result table and minimal extra info."""
     if result.error:
         console.print(f"[red]{result.error}[/red]")
         if result.backend == "none" or "Official Ookla CLI is not installed" in result.error:
@@ -357,6 +411,10 @@ def print_speedtest_result(result: SpeedtestResult) -> None:
         console.print(f"[dim]Packet loss: {result.packet_loss:.2f}%[/dim]")
     if result.backend == "python-speedtest-cli":
         console.print("[yellow]当前使用 Python speedtest-cli fallback，结果可能低于网页测速或官方 Ookla CLI。[/yellow]")
+
+
+def print_speedtest_results_extra(result: SpeedtestResult) -> None:
+    """Print detailed speedtest diagnostics: quality warnings and path analysis."""
     print_speedtest_quality_warning(result)
     print_speedtest_path_analysis(result)
 
@@ -416,7 +474,7 @@ def is_speedtest_result_suspicious(result: SpeedtestResult) -> bool:
 
 
 def show_proxy_exit_speedtest() -> None:
-    """Show current CLI exit IP and run best speedtest."""
+    """Show current CLI exit IP and run best speedtest (simplified, optional detailed)."""
     info = probe_exit_ip()
     table = Table(title="当前 CLI 公网出口")
     table.add_column("Field", style="bold cyan")
@@ -428,14 +486,55 @@ def show_proxy_exit_speedtest() -> None:
     if info.error:
         table.add_row("Error", info.error)
     console.print(table)
-    console.print("[dim]如果你使用 TUN/VPN 模式，CLI 通常会走代理出口。[/dim]")
-    console.print("[dim]如果只是浏览器代理，CLI 可能仍然直连。[/dim]")
-    console.print("[dim]本功能只检测当前 CLI 进程实际看到的公网出口。[/dim]")
-    console.print("[dim]代理/当前出口测速不会强制指定 en0/en1，会按当前 CLI 进程实际出口测速。[/dim]")
-    result = run_speedtest_with_status(lambda: run_best_speedtest(use_interface=False))
-    if result is None:
+    console.print("[dim]已检测当前 CLI 公网出口。[/dim]")
+    time.sleep(0.4)
+
+    console.print("[dim]本次测速将按当前 CLI 进程实际出口进行，不强制指定物理网卡。[/dim]")
+    time.sleep(0.4)
+    console.print("[dim]正在准备测速后端...[/dim]")
+    time.sleep(0.4)
+    console.print("[dim]测速进行中，通常需要 10~30 秒...[/dim]")
+
+    try:
+        with console.status("[bold green]等待测速后端返回...[/bold green]"):
+            result = run_best_speedtest(use_interface=False)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已取消当前测速，返回菜单。[/yellow]")
         return
-    print_speedtest_result(result)
+
+    if result.error:
+        console.print(f"[red]当前出口测速失败：{compact_error(result.error)}[/red]")
+        console.print("[yellow]可尝试：关闭/切换代理，或使用高级功能里的通用测速诊断。[/yellow]")
+        return
+
+    console.print("[dim]测速后端已返回结果，正在整理...[/dim]")
+    time.sleep(0.3)
+    console.print("[dim]测速完成。[/dim]")
+    print_speedtest_result_table(result)
+    print_proxy_exit_judgment(result)
+
+    try:
+        show_detailed = Prompt.ask("是否查看详细诊断？", choices=["y", "n"], default="n")
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已返回主菜单。[/yellow]")
+        return
+
+    if show_detailed.lower() == "y":
+        print_speedtest_results_extra(result)
+
+
+def print_proxy_exit_judgment(result: SpeedtestResult) -> None:
+    """Print a one-line judgment for the proxy exit speedtest result."""
+    if detect_vpn_tun(result):
+        console.print("[yellow]检测到当前可能经过代理/TUN，结果更可能代表代理出口质量。[/yellow]")
+    else:
+        console.print("[yellow]未检测到明显 TUN/VPN，结果更接近当前直连出口质量。[/yellow]")
+    console.print("[dim]当前测速代表当前 CLI 出口路径，不一定代表本地宽带裸连质量。[/dim]")
+
+
+def compact_error(error: str) -> str:
+    """Return the first line of an error message without traceback."""
+    return error.strip().splitlines()[0] if error.strip() else "未知错误"
 
 
 def show_keyword_speedtest() -> None:

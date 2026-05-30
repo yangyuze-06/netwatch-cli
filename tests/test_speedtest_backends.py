@@ -1016,3 +1016,388 @@ def test_build_advanced_menu_contains_general_diagnosis_first() -> None:
     assert "LibreSpeed 自定义服务器列表测速" in rendered
     assert rendered.index("通用测速诊断") < rendered.index("LibreSpeed")
     assert "实验：自动浏览器测速" not in rendered
+
+
+# --- Proxy exit speedtest simplified output tests ---
+
+
+def run_proxy_speedtest_with_answers(monkeypatch, answer: str, test_result=None) -> tuple[str, list[str]]:
+    """Helper: run show_proxy_exit_speedtest with mocked exit info + prompt answer."""
+    import io
+    from rich.console import Console
+    from netwatch import cli as cli_mod
+    from netwatch.proxy_probe import ExitIPInfo
+
+    prompts = []
+    answer_iter = iter([answer])
+
+    def fake_prompt(prompt, *args, **kwargs):
+        prompts.append(prompt)
+        return next(answer_iter)
+
+    monkeypatch.setattr(cli_mod.Prompt, "ask", fake_prompt)
+    monkeypatch.setattr(
+        cli_mod,
+        "probe_exit_ip",
+        lambda: ExitIPInfo(ip="1.2.3.4", city="Guangzhou", region="Guangdong", country="CN", org="China Mobile"),
+    )
+
+    if test_result is None:
+        test_result = SpeedtestResult(
+            backend="official-ookla-cli",
+            ping_ms=8.0,
+            download_mbps=782.44,
+            upload_MBps=8.59,
+            server_name="China Mobile",
+            server_location="Guangzhou",
+            raw={"interface": {"name": "en0", "internalIp": "192.168.31.75"}},
+        )
+
+    monkeypatch.setattr(cli_mod, "run_best_speedtest", lambda use_interface=False: test_result)
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        cli_mod.show_proxy_exit_speedtest()
+    finally:
+        cli_mod.console = original_console
+
+    return buf.getvalue(), prompts
+
+
+def test_proxy_speedtest_default_no_detailed_diagnostics(monkeypatch) -> None:
+    """Proxy speedtest must NOT show Result confidence, path analysis, or VPN/TUN by default."""
+    output, prompts = run_proxy_speedtest_with_answers(monkeypatch, "n")
+
+    assert "Result confidence" not in output
+    assert "网络路径分析" not in output
+    assert "触发条件" not in output
+    assert "测速结果可能不代表真实最大带宽" not in output
+    assert "当前测速代表当前 CLI 出口路径" in output
+    assert any("是否查看详细诊断" in p for p in prompts)
+
+
+def test_proxy_speedtest_no_fake_staged_progress(monkeypatch) -> None:
+    """Proxy speedtest must NOT contain fake staged progress messages."""
+    output, prompts = run_proxy_speedtest_with_answers(monkeypatch, "n")
+
+    assert "正在执行下载测速" not in output
+    assert "正在执行上传测速" not in output
+    assert "正在连接测速服务器" not in output
+    assert "正在启动测速后端" not in output
+
+
+def test_proxy_speedtest_real_progress_messages(monkeypatch) -> None:
+    """Proxy speedtest must contain honest visible progress messages."""
+    output, prompts = run_proxy_speedtest_with_answers(monkeypatch, "n")
+
+    assert "已检测当前 CLI 公网出口" in output
+    assert "本次测速将按当前 CLI 进程实际出口进行，不强制指定物理网卡" in output
+    assert "正在准备测速后端" in output
+    assert "测速进行中，通常需要 10~30 秒" in output
+    assert "测速后端已返回结果，正在整理" in output
+    assert "测速完成" in output
+
+
+def test_proxy_speedtest_asks_detailed_prompt(monkeypatch) -> None:
+    """Proxy speedtest must ask about detailed diagnostics."""
+    output, prompts = run_proxy_speedtest_with_answers(monkeypatch, "y")
+
+    assert any("是否查看详细诊断" in p for p in prompts)
+    assert "Speedtest 测速结果" in output
+
+
+def test_proxy_speedtest_no_does_not_show_detailed(monkeypatch) -> None:
+    """When user chooses n, detailed diagnostics must NOT appear."""
+    output, prompts = run_proxy_speedtest_with_answers(monkeypatch, "n")
+
+    assert "Result confidence" not in output
+    assert "网络路径分析" not in output
+
+
+def test_proxy_speedtest_yes_shows_detailed(monkeypatch) -> None:
+    """When user chooses y, detailed diagnostics must appear."""
+    output, prompts = run_proxy_speedtest_with_answers(monkeypatch, "y")
+
+    assert "Result confidence" in output
+    assert "网络路径分析" in output
+
+
+def test_proxy_speedtest_error_no_traceback(monkeypatch) -> None:
+    """Proxy speedtest error must show concise error without traceback."""
+    error_result = SpeedtestResult(backend="official-ookla-cli", error="Cannot read from socket: timeout")
+    output, prompts = run_proxy_speedtest_with_answers(monkeypatch, "n", test_result=error_result)
+
+    assert "当前出口测速失败" in output
+    assert "Cannot read from socket" in output
+    assert "Traceback" not in output
+    assert "高级功能里的通用测速诊断" in output
+
+
+def test_proxy_speedtest_vpn_tun_judgment(monkeypatch) -> None:
+    """When VPN/TUN is detected, proxy speedtest must show appropriate judgment."""
+    import io
+    from rich.console import Console
+    from netwatch import cli as cli_mod
+    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.speedtest_runner import SpeedtestResult
+
+    test_result = SpeedtestResult(
+        backend="official-ookla-cli",
+        ping_ms=8.0,
+        download_mbps=50,
+        upload_MBps=6.25,
+        server_name="Tokyo",
+        server_location="Japan",
+        raw={"interface": {"name": "utun8", "internalIp": "198.18.0.1"}},
+    )
+
+    monkeypatch.setattr(cli_mod, "probe_exit_ip", lambda: ExitIPInfo(ip="1.2.3.4", city="", region="", country="", org=""))
+    monkeypatch.setattr(cli_mod, "run_best_speedtest", lambda use_interface=False: test_result)
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: "n")
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        cli_mod.show_proxy_exit_speedtest()
+    finally:
+        cli_mod.console = original_console
+
+    output = buf.getvalue()
+    assert "检测到当前可能经过代理/TUN" in output
+    assert "更可能代表代理出口质量" in output
+
+
+def test_proxy_speedtest_no_vpn_tun_judgment(monkeypatch) -> None:
+    """When no VPN/TUN is detected, proxy speedtest must show appropriate judgment."""
+    import io
+    from rich.console import Console
+    from netwatch import cli as cli_mod
+    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.speedtest_runner import SpeedtestResult
+
+    test_result = SpeedtestResult(
+        backend="official-ookla-cli",
+        ping_ms=8.0,
+        download_mbps=782,
+        upload_MBps=97.75,
+        server_name="China Mobile",
+        server_location="Guangzhou",
+        raw={"interface": {"name": "en0", "internalIp": "192.168.31.75"}},
+    )
+
+    monkeypatch.setattr(cli_mod, "probe_exit_ip", lambda: ExitIPInfo(ip="1.2.3.4", city="", region="", country="", org=""))
+    monkeypatch.setattr(cli_mod, "run_best_speedtest", lambda use_interface=False: test_result)
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: "n")
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        cli_mod.show_proxy_exit_speedtest()
+    finally:
+        cli_mod.console = original_console
+
+    output = buf.getvalue()
+    assert "未检测到明显 TUN/VPN" in output
+    assert "更接近当前直连出口质量" in output
+
+
+def test_show_auto_speedtest_still_shows_detailed(monkeypatch) -> None:
+    """show_auto_speedtest (advanced menu item 1) must still show detailed diagnostics."""
+    import io
+    from rich.console import Console
+    from netwatch import cli as cli_mod
+    from netwatch import config
+
+    test_result = SpeedtestResult(
+        backend="official-ookla-cli",
+        ping_ms=8.0,
+        download_mbps=782,
+        upload_MBps=97.75,
+        server_name="China Mobile",
+        server_location="Guangzhou",
+        raw={"interface": {"name": "en0", "internalIp": "192.168.31.75"}},
+    )
+
+    monkeypatch.setattr(config, "get_preferred_speedtest", lambda: None)
+    monkeypatch.setattr(cli_mod, "run_best_speedtest", lambda use_interface=True: test_result)
+    monkeypatch.setattr(
+        cli_mod, "get_preferred_physical_interface",
+        lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"},
+    )
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        cli_mod.show_auto_speedtest()
+    finally:
+        cli_mod.console = original_console
+
+    output = buf.getvalue()
+    assert "Speedtest 测速结果" in output
+    # show_auto_speedtest should show detailed diagnostics by default
+    assert "Result confidence" in output or "Result" in output
+    assert "网络路径分析" in output
+
+
+# --- Network info display tests ---
+
+
+def run_network_info_with_answers(monkeypatch, answer: str) -> str:
+    """Helper: run show_network_info with mocked exit info + prompt answer."""
+    import io
+    from rich.console import Console
+    from netwatch import cli as cli_mod
+    from netwatch.network_info import InterfaceInfo
+    from netwatch.proxy_probe import ExitIPInfo
+
+    monkeypatch.setattr(
+        cli_mod, "get_preferred_physical_interface",
+        lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"},
+    )
+    monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
+    monkeypatch.setattr(
+        cli_mod, "probe_exit_ip",
+        lambda: ExitIPInfo(ip="1.2.3.4", city="Guangzhou", region="Guangdong", country="CN", org="China Mobile"),
+    )
+    monkeypatch.setattr(
+        cli_mod, "get_display_network_interfaces",
+        lambda: [
+            InterfaceInfo("en0", "192.168.31.75", "aa:bb:cc:dd:ee:ff"),
+            InterfaceInfo("en1", "10.0.0.1", "11:22:33:44:55:66"),
+            InterfaceInfo("utun2", "198.18.0.1", "fe:ed:be:ef:00:01"),
+        ],
+    )
+
+    prompts = []
+    answer_iter = iter([answer])
+
+    def fake_prompt(prompt, *args, **kwargs):
+        prompts.append(prompt)
+        return next(answer_iter)
+
+    monkeypatch.setattr(cli_mod.Prompt, "ask", fake_prompt)
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        cli_mod.show_network_info()
+    finally:
+        cli_mod.console = original_console
+
+    return buf.getvalue()
+
+
+def test_network_info_shows_local_info(monkeypatch) -> None:
+    """Main menu 2 must show primary LAN interface and gateway by default."""
+    output = run_network_info_with_answers(monkeypatch, "n")
+    assert "本机局域网信息" in output
+    assert "en0" in output
+    assert "192.168.31.75" in output
+    assert "默认网关" in output
+    assert "192.168.31.1" in output
+
+
+def test_network_info_shows_public_exit(monkeypatch) -> None:
+    """Main menu 2 must show current public exit location."""
+    output = run_network_info_with_answers(monkeypatch, "n")
+    assert "当前公网出口" in output
+    assert "1.2.3.4" in output
+    assert "Guangzhou" in output
+    assert "China Mobile" in output
+
+
+def test_network_info_hides_full_interfaces_by_default(monkeypatch) -> None:
+    """Main menu 2 must NOT show full interface table by default."""
+    output = run_network_info_with_answers(monkeypatch, "n")
+    assert "全部网卡信息" not in output
+    assert "utun2" not in output
+    assert "en1" not in output
+
+
+def test_network_info_asks_full_interfaces_prompt(monkeypatch) -> None:
+    """Main menu 2 must ask about full interface details."""
+    import io
+    from rich.console import Console
+    from netwatch import cli as cli_mod
+    from netwatch.network_info import InterfaceInfo
+    from netwatch.proxy_probe import ExitIPInfo
+
+    monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
+    monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
+    monkeypatch.setattr(cli_mod, "probe_exit_ip", lambda: ExitIPInfo(ip="1.2.3.4", city="", region="", country="", org=""))
+    monkeypatch.setattr(
+        cli_mod, "get_display_network_interfaces",
+        lambda: [InterfaceInfo("en0", "192.168.31.75", "aa:bb:cc:dd:ee:ff")],
+    )
+
+    prompts = []
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda prompt, **kwargs: prompts.append(prompt) or "n")
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        cli_mod.show_network_info()
+    finally:
+        cli_mod.console = original_console
+
+    assert any("是否查看全部网卡详情" in p for p in prompts)
+
+
+def test_network_info_yes_shows_full_interfaces(monkeypatch) -> None:
+    """When user selects y, full interface table must appear."""
+    output = run_network_info_with_answers(monkeypatch, "y")
+    assert "全部网卡信息" in output
+    assert "en0" in output
+    assert "en1" in output
+    assert "utun2" in output
+
+
+def test_network_info_uses_gongwang_chukou_wording(monkeypatch) -> None:
+    """Main menu 2 must use '公网出口' wording, not '当前位置'."""
+    output = run_network_info_with_answers(monkeypatch, "n")
+    assert "公网出口" in output
+    assert "当前位置" not in output
+
+
+def test_network_info_exit_failure_no_traceback(monkeypatch) -> None:
+    """When exit probe fails, must show friendly message without traceback."""
+    import io
+    from rich.console import Console
+    from netwatch import cli as cli_mod
+    from netwatch.network_info import InterfaceInfo
+    from netwatch.proxy_probe import ExitIPInfo
+
+    monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
+    monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
+    monkeypatch.setattr(cli_mod, "probe_exit_ip", lambda: ExitIPInfo(ip=None, city=None, region=None, country=None, org=None, error="timeout"))
+    monkeypatch.setattr(
+        cli_mod, "get_display_network_interfaces",
+        lambda: [InterfaceInfo("en0", "192.168.31.75", "aa:bb:cc:dd:ee:ff")],
+    )
+    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: "n")
+
+    buf = io.StringIO()
+    console = Console(file=buf, force_terminal=False, width=120)
+    original_console = cli_mod.console
+    cli_mod.console = console
+    try:
+        cli_mod.show_network_info()
+    finally:
+        cli_mod.console = original_console
+
+    output = buf.getvalue()
+    assert "未能获取当前公网出口信息" in output
+    assert "Traceback" not in output
