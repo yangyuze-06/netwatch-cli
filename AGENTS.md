@@ -33,7 +33,7 @@ git diff --check
 - 支持 LibreSpeed custom server list，并说明公共节点质量不保证。
 - 做测速结果质量诊断。
 - 保留 Python speedtest-cli fallback，但明确提示结果可能偏低。
-- 设计 V0.10 `speedtest.cn` browser automation 实验方向，但不作为稳定后端。
+- 维护 V0.10 `speedtest.cn` browser automation 实验功能，但不作为稳定后端。
 
 ## 接手前必读
 
@@ -50,5 +50,7 @@ git diff --check
 - 不要重新加入 speedtest.cn 手动录入/粘贴结果功能（已删除）。
 - 不要逆向 speedtest.cn 私有 API。
 - 不要把 speedtest.cn browser automation 当成官方 API 后端。
-- 不要为了实验功能引入默认主菜单入口或默认依赖 Playwright。
+- 不要为了实验功能引入默认主菜单入口或强制 Playwright 依赖。
+- 不要让默认测试真实访问 speedtest.cn 或真实启动浏览器，必须 mock。
+- 不要提交 `~/.netwatch/debug/` screenshot。
 - 不要大重构。

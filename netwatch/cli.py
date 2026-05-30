@@ -41,6 +41,8 @@ from netwatch.router import (
 )
 from netwatch.speed import format_speed, sample_network_speed
 from netwatch.proxy_probe import probe_exit_ip
+from netwatch.speedtest_cn import SpeedtestCnResult
+from netwatch.speedtest_cn_browser import BrowserAutomationOptions, run_speedtest_cn_browser_automation
 from netwatch.speedtest_runner import (
     SpeedtestResult,
     build_isp_preset_keywords,
@@ -68,6 +70,13 @@ SPEEDTEST_STATUS_MESSAGES = (
     "正在执行下载测速...",
     "正在执行上传测速...",
     "测速可能需要 10~30 秒...",
+)
+SPEEDTEST_CN_BROWSER_STATUS_MESSAGES = (
+    "正在打开 speedtest.cn...",
+    "正在等待测速按钮...",
+    "正在开始测速...",
+    "正在等待结果，大约需要 20~90 秒...",
+    "正在解析结果...",
 )
 
 
@@ -629,7 +638,7 @@ def show_last_speedtest_raw_summary() -> None:
     console.print(table)
 
 
-def show_open_speedtest_cn() -> None:
+def open_speedtest_cn_reference() -> None:
     """Open speedtest.cn as a browser reference test."""
     url = "https://www.speedtest.cn/"
     import webbrowser
@@ -638,6 +647,135 @@ def show_open_speedtest_cn() -> None:
     console.print(f"[green]已打开 speedtest.cn 网页。[/green]")
     console.print("[dim]这是浏览器对照测速，不会自动回传结果到终端。[/dim]")
     console.print("[dim]本项目不调用或逆向 speedtest.cn 私有 API。[/dim]")
+
+
+def show_speedtest_cn_browser_automation() -> None:
+    """Run experimental speedtest.cn browser automation from the advanced menu."""
+    console.print("[yellow]这是实验功能，会启动后台浏览器访问 speedtest.cn。[/yellow]")
+    console.print("[yellow]本功能不会调用 speedtest.cn 私有 API。[/yellow]")
+    console.print("[yellow]页面结构变化、广告、验证码或反自动化策略可能导致失败。[/yellow]")
+    console.print("[dim]默认将使用后台浏览器运行，不会打开可见窗口。[/dim]")
+    console.print("[dim]如果需要观察页面行为，请选择 debug 可见浏览器模式。[/dim]")
+    try:
+        continue_choice = Prompt.ask("是否继续？", choices=["y", "n"], default="n")
+        if continue_choice.lower() != "y":
+            console.print("[yellow]已取消实验测速。[/yellow]")
+            return
+        debug_choice = Prompt.ask("使用可见浏览器调试？", choices=["y", "n"], default="n")
+        debug_visible_browser = debug_choice.lower() == "y"
+        screenshot_choice = Prompt.ask("保存 debug screenshot？", choices=["y", "n"], default="n")
+        debug_screenshot = screenshot_choice.lower() == "y"
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已取消当前实验任务，返回高级菜单。[/yellow]")
+        return
+
+    options = BrowserAutomationOptions(
+        headless=not debug_visible_browser,
+        timeout_seconds=90,
+        debug_screenshot=debug_screenshot,
+    )
+    if options.headless:
+        console.print("[dim]实验测速将以 headless 后台模式运行，不会打开可见浏览器窗口。[/dim]")
+        console.print("[dim]正在以后台模式启动浏览器...[/dim]")
+    else:
+        console.print("[yellow]你已选择可见浏览器调试模式，将打开浏览器窗口。[/yellow]")
+        console.print("[dim]正在以可见浏览器调试模式启动浏览器...[/dim]")
+    console.print(f"[dim]headless={options.headless}[/dim]")
+    console.print(f"[dim]debug_screenshot={options.debug_screenshot}[/dim]")
+    for message in SPEEDTEST_CN_BROWSER_STATUS_MESSAGES:
+        console.print(f"[dim]{message}[/dim]")
+
+    try:
+        with console.status("[bold green]speedtest.cn browser automation 进行中...[/bold green]"):
+            result = run_speedtest_cn_browser_automation(options)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已取消当前实验任务，返回高级菜单。[/yellow]")
+        return
+
+    if options.headless and is_headless_http2_failure(result):
+        print_headless_http2_failure_guidance()
+        try:
+            retry_choice = Prompt.ask("是否切换到可见浏览器调试模式重试？", choices=["y", "n"], default="n")
+        except KeyboardInterrupt:
+            console.print("\n[yellow]已取消当前实验任务，返回高级菜单。[/yellow]")
+            return
+        if retry_choice.lower() != "y":
+            console.print("[yellow]已返回高级菜单。[/yellow]")
+            return
+        retry_options = BrowserAutomationOptions(
+            headless=False,
+            timeout_seconds=options.timeout_seconds,
+            debug_screenshot=options.debug_screenshot,
+        )
+        console.print("[yellow]你已选择可见浏览器调试模式，将打开浏览器窗口。[/yellow]")
+        console.print(f"[dim]headless={retry_options.headless}[/dim]")
+        console.print(f"[dim]debug_screenshot={retry_options.debug_screenshot}[/dim]")
+        try:
+            with console.status("[bold green]speedtest.cn browser automation 调试模式进行中...[/bold green]"):
+                result = run_speedtest_cn_browser_automation(retry_options)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]已取消当前实验任务，返回高级菜单。[/yellow]")
+            return
+
+    print_speedtest_cn_browser_result(result)
+
+
+def is_headless_http2_failure(result: SpeedtestCnResult) -> bool:
+    """Return True for the known headless HTTP/2 navigation failure."""
+    return bool(result.error and "ERR_HTTP2_PROTOCOL_ERROR" in result.error)
+
+
+def print_headless_http2_failure_guidance() -> None:
+    """Print concise, user-facing guidance for headless speedtest.cn access failures."""
+    console.print("[red]后台浏览器访问 speedtest.cn 失败。[/red]")
+    console.print("[yellow]可能原因：[/yellow]")
+    console.print("[yellow]- speedtest.cn 页面/CDN 对 headless Chromium 不兼容[/yellow]")
+    console.print("[yellow]- HTTP/2 协议错误[/yellow]")
+    console.print("[yellow]- 页面存在反自动化策略[/yellow]")
+    console.print("[yellow]- 当前网络路径异常[/yellow]")
+    console.print("[yellow]建议：[/yellow]")
+    console.print("[yellow]- 选择可见浏览器调试模式[/yellow]")
+    console.print("[yellow]- 或使用 speedtest.cn 网页对照测速[/yellow]")
+    console.print("[yellow]- 或使用 Ookla / LibreSpeed 后端[/yellow]")
+    console.print("[dim]技术错误：ERR_HTTP2_PROTOCOL_ERROR[/dim]")
+
+
+def print_speedtest_cn_browser_result(result: SpeedtestCnResult) -> None:
+    """Print an experimental speedtest.cn browser automation result."""
+    if result.error:
+        if result.error.startswith("已取消"):
+            console.print("[yellow]已取消当前实验任务，返回高级菜单。[/yellow]")
+            return
+        console.print(f"[red]{result.error}[/red]")
+        if "Playwright is not installed" in result.error:
+            console.print("[yellow]Playwright 是可选依赖，安装后再运行实验功能：[/yellow]")
+            console.print("[bold]pip install playwright[/bold]")
+            console.print("[bold]playwright install chromium[/bold]")
+        console.print("[yellow]可能原因：页面结构变化、弹窗/广告遮挡、headless 浏览器被限制、测速未完成或 DOM 文本无法解析。[/yellow]")
+        console.print("[yellow]建议：使用可见浏览器调试，或改用 Ookla / LibreSpeed 后端。[/yellow]")
+        return
+
+    table = Table(title="speedtest.cn Browser Automation 结果")
+    table.add_column("Source", style="bold cyan")
+    table.add_column("Server")
+    table.add_column("Location")
+    table.add_column("Ping", justify="right")
+    table.add_column("Jitter", justify="right")
+    table.add_column("Download", justify="right")
+    table.add_column("Upload", justify="right")
+    table.add_row(
+        result.source,
+        result.server_name or "-",
+        result.location or "-",
+        format_optional_ms(result.ping_ms),
+        format_optional_ms(result.jitter_ms),
+        format_bandwidth(result.download_mbps, result.download_MBps),
+        format_bandwidth(result.upload_mbps, result.upload_MBps),
+    )
+    console.print(table)
+    console.print("[dim]这是实验浏览器自动化结果，不是 speedtest.cn 官方 API 后端。[/dim]")
+    if result.debug_screenshot_path:
+        console.print(f"[dim]Debug screenshot: {result.debug_screenshot_path}[/dim]")
 
 
 def build_librespeed_menu() -> Panel:
@@ -1026,7 +1164,8 @@ def build_advanced_menu() -> Panel:
             "[bold cyan]9[/bold cyan]. 显示 Ookla server selection details",
             "[bold cyan]10[/bold cyan]. LibreSpeed 自定义服务器列表测速",
             "[bold cyan]11[/bold cyan]. 打开 speedtest.cn 网页对照测速",
-            "[bold cyan]12[/bold cyan]. 返回主菜单",
+            "[bold cyan]12[/bold cyan]. 实验：自动浏览器测速 speedtest.cn",
+            "[bold cyan]13[/bold cyan]. 返回主菜单",
         ]
     )
     return Panel(menu, title="高级功能", border_style="cyan")
@@ -1039,8 +1178,8 @@ def show_advanced_menu() -> None:
             console.print(build_advanced_menu())
             choice = Prompt.ask(
                 "请选择高级功能",
-                choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
-                default="12",
+                choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"],
+                default="13",
             )
             if choice == "1":
                 show_speedtest_by_server_id()
@@ -1063,8 +1202,10 @@ def show_advanced_menu() -> None:
             elif choice == "10":
                 show_librespeed_custom_menu()
             elif choice == "11":
-                show_open_speedtest_cn()
+                open_speedtest_cn_reference()
             elif choice == "12":
+                show_speedtest_cn_browser_automation()
+            elif choice == "13":
                 break
         except KeyboardInterrupt:
             console.print("\n[yellow]已返回主菜单。[/yellow]")

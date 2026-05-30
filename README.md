@@ -11,6 +11,7 @@
 - 使用多后端运行公网带宽测速。
 - 检查代理/当前 CLI 出口并测速。
 - 支持测速服务器筛选、常用配置保存和结果质量提示。
+- 高级功能中提供 `speedtest.cn` browser automation 实验入口。
 
 ## Quick Start
 
@@ -80,7 +81,25 @@ Ookla、LibreSpeed 和 `speedtest.cn` 的服务器池不同。某个后端测速
 
 `speedtest.cn` 只作为网页对照入口。本项目不逆向 `speedtest.cn` 私有 API，不抓取隐藏接口，也不支持手动粘贴测速结果回填。
 
-未来 V0.10 实验方向会评估 `speedtest.cn` browser automation：后台浏览器打开网页、点击测速并从 DOM 文本读取结果。它不等同于官方 API 后端，也不会进入默认带宽测速主流程。当前稳定后端仍是 Ookla / LibreSpeed / Python fallback。
+V0.10 增加了实验功能：`speedtest.cn` browser automation。它默认以 `headless=True` 后台启动 Playwright/Chromium，不打开可见浏览器窗口；只在用户明确选择 debug 可见浏览器模式时才使用 `headless=False`。它会打开网页、点击测速并从 DOM 文本读取结果，但不等同于官方 API 后端，不抓包、不读取 Cookie、不逆向私有接口，也不会进入默认带宽测速主流程。当前稳定后端仍是 Ookla / LibreSpeed / Python fallback。
+
+启用该实验功能需要可选依赖：
+
+```bash
+pip install -e ".[browser]"
+playwright install chromium
+```
+
+也可以直接安装：
+
+```bash
+pip install playwright
+playwright install chromium
+```
+
+默认不保存截图。只有用户在实验入口中确认保存 debug screenshot 时，才会写入 `~/.netwatch/debug/`；截图可能包含页面状态，不要上传或提交到 Git。Debug screenshot 和可见浏览器是两个独立选项，保存截图不代表浏览器会变成可见窗口。
+
+`speedtest.cn` 页面/CDN 可能对 headless Chromium、HTTP/2 或自动化环境不友好，已知失败模式包括 `ERR_HTTP2_PROTOCOL_ERROR`。工具会先在 headless 模式下用兼容参数自动重试一次；如果仍失败，只会询问是否切换到可见浏览器调试模式，不会静默打开可见窗口。
 
 ## 配置
 
@@ -111,9 +130,10 @@ source .venv/bin/activate
 python -m compileall netwatch
 pytest -q
 python -m pytest -q
+git diff --check
 ```
 
-所有公网测速、subprocess、`curl`、`requests` 和路由器 API 测试都必须 mock。
+所有公网测速、subprocess、`curl`、`requests`、Playwright 浏览器访问和路由器 API 测试都必须 mock。
 
 ## 文档
 

@@ -20,7 +20,7 @@
 - 将结构化结果输出到 `netwatch-cli` 表格。
 - 不调用、不抓包、不逆向 `speedtest.cn` 私有 API。
 
-这个方向主要用于减少手动录入网页测速结果的操作成本，并尽量避免用户在
+当前实现主要用于减少手动录入网页测速结果的操作成本，并尽量避免用户在
 CLI 场景中直接面对网页广告和复杂页面。
 
 ## 2. 为什么是实验功能
@@ -37,31 +37,52 @@ CLI 场景中直接面对网页广告和复杂页面。
 
 ## 3. 技术方案
 
-建议方案：
+当前实现：
 
 - 使用 Playwright Python。
-- 默认 `headless=True` 后台运行。
-- Debug 模式支持 `headless=False`，方便观察页面行为。
+- 默认 `headless=True` 后台运行，不打开可见浏览器窗口。
+- 只有用户明确选择 debug 可见浏览器模式时才使用 `headless=False`，方便观察页面行为。
+- Browser context 使用桌面 Chrome UA、`1440x900` viewport、`zh-CN` locale、`Asia/Shanghai` timezone 和 `Accept-Language` 头，尽量贴近普通桌面浏览器。
 - 使用 `page.goto("https://www.speedtest.cn/")` 打开页面。
+- 如果 headless 首次访问出现 `ERR_HTTP2_PROTOCOL_ERROR`，自动以 `headless=True` 和兼容 launch args 重试一次。
 - 等待测速按钮出现。
 - 点击测速按钮。
-- 等待 20~60 秒，或等待结果文本稳定。
+- 等待 20~90 秒，或等待结果文本稳定。
 - 使用 `page.locator("body").inner_text()` 读取 DOM 文本。
 - 用 parser 从文本提取测速结果。
 - 可选保存 screenshot 到 `~/.netwatch/debug/` 作为调试证据。
+- Debug screenshot 和 visible browser 是两个独立选项；保存截图不意味着浏览器可见。
+- Playwright 是 optional dependency，不在默认安装依赖中强制安装。
 
 该方案只模拟用户打开网页并点击测速，不调用网页内部私有接口，不读取网络请求
 payload，不做抓包分析。
 
+可选依赖安装：
+
+```bash
+pip install -e ".[browser]"
+playwright install chromium
+```
+
+或：
+
+```bash
+pip install playwright
+playwright install chromium
+```
+
 ## 4. 第一版实现边界
 
-第一版只做：
+第一版已做：
 
 - 检测 Playwright 是否安装。
 - 自动打开页面。
 - 自动点击测速。
 - DOM 文本解析。
 - 失败时返回友好错误，不抛出 traceback 给用户。
+- 高级功能实验入口。
+- 可见浏览器 debug 模式，默认关闭。
+- 可选 debug screenshot。
 
 第一版不做：
 
@@ -100,12 +121,12 @@ Parser 支持从页面文本里解析：
 
 ## 6. CLI 设计
 
-未来可以在高级功能中加入实验室入口：
+当前高级功能中包含实验入口：
 
 ```text
-实验室功能
-1. 自动浏览器测速 speedtest.cn
-2. 返回
+11. 打开 speedtest.cn 网页对照测速
+12. 实验：自动浏览器测速 speedtest.cn
+13. 返回主菜单
 ```
 
 运行前提示：
@@ -119,14 +140,15 @@ Parser 支持从页面文本里解析：
 
 运行时提示：
 
-- 正在启动浏览器...
+- 正在以后台模式启动浏览器...
+- 正在以可见浏览器调试模式启动浏览器...
 - 正在打开 speedtest.cn...
 - 正在等待测速按钮...
 - 正在开始测速...
-- 正在等待结果，大约需要 20~60 秒...
+- 正在等待结果，大约需要 20~90 秒...
 - 正在解析结果...
 
-V0.10.0 只记录设计，不新增 CLI 菜单入口。
+该入口只在高级功能中出现，不接入默认“带宽测速”主流程。
 
 ## 7. 失败处理
 
@@ -135,6 +157,7 @@ V0.10.0 只记录设计，不新增 CLI 菜单入口。
 - 页面结构变化。
 - 弹窗或广告遮挡。
 - Headless 浏览器被限制。
+- `speedtest.cn` 页面/CDN/HTTP2 对 headless Chromium 不兼容，可能表现为 `ERR_HTTP2_PROTOCOL_ERROR`。
 - 测速未完成。
 - DOM 文本无法解析。
 
@@ -145,6 +168,7 @@ V0.10.0 只记录设计，不新增 CLI 菜单入口。
 - 使用 Ookla / LibreSpeed 后端。
 
 错误信息应面向用户解释原因和下一步选择，不暴露长 traceback。
+如果 headless 兼容重试仍失败，CLI 只会询问是否切换到可见浏览器调试模式；只有用户明确输入 `y` 时才会打开可见浏览器，不会静默打开窗口。
 
 ## 8. 安全和合规边界
 
@@ -157,6 +181,9 @@ V0.10.0 只记录设计，不新增 CLI 菜单入口。
 - 不高频循环测速。
 - 不作为官方 `speedtest.cn` 后端。
 - 不把浏览器自动化结果宣传为稳定、官方或可长期依赖。
+- Debug screenshot 默认关闭；开启后截图写入 `~/.netwatch/debug/`，可能包含页面状态，不要上传或提交到 Git。
+- Debug screenshot 不改变 `headless` 设置；截图开启且未选择可见浏览器时，仍然后台运行。
+- Headless 失败不会自动降级到可见浏览器；可见窗口必须由用户确认。
 
 如果未来有 `speedtest.cn` 正式 SDK/API 授权，应作为独立后端接入，并与本实验
 功能分开设计、分开测试、分开文档说明。
@@ -171,6 +198,9 @@ V0.10.0 只记录设计，不新增 CLI 菜单入口。
 - Playwright missing dependency error。
 - CLI 确认提示。
 - Failure path。
+- Mock browser DOM success path。
+- Timeout / KeyboardInterrupt path。
+- Debug screenshot path。
 
 真实浏览器测试只作为手动实验，不放进默认 CI。所有公网测速、浏览器访问和
 外部页面行为都不能成为默认测试依赖。
@@ -179,22 +209,14 @@ V0.10.0 只记录设计，不新增 CLI 菜单入口。
 
 V0.10.0:
 
-- 只新增设计文档。
-
-V0.10.1:
-
+- 新增设计文档。
 - 实现 parser + mock tests。
-
-V0.10.2:
-
 - 实现 Playwright 实验模块，但不进默认主流程。
+- 增加高级功能实验入口。
+- 支持可选 `headless=False` 调试模式。
+- 支持可选 screenshot debug。
 
-V0.10.3:
+后续可能方向：
 
-- 可选 `headless=False` 调试模式。
-
-V0.10.4:
-
-- 可选 screenshot debug。
 - OCR fallback 只作为未来可能性，不默认实现。
-
+- 如果 `speedtest.cn` 提供正式 SDK/API 授权，可独立设计官方后端。

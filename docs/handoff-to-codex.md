@@ -10,14 +10,15 @@
 - **speedtest.cn 只保留"打开网页对照测速"**：`show_open_speedtest_cn()` 使用 `webbrowser.open()`，不询问用户粘贴结果，不要求手动录入。
 - **明确 netwatch-cli 不自动读取 speedtest.cn 网页结果**：文档和代码注释中已写明。
 - **明确不逆向 speedtest.cn 私有 API**。
-- **新增 V0.10 实验设计文档**：`docs/speedtest-cn-browser-automation.md` 记录未来 Playwright browser automation 方向，只做网页自动化实验，不作为稳定后端。
+- **新增 V0.10 实验设计文档**：`docs/speedtest-cn-browser-automation.md` 记录 Playwright browser automation 实验方向，只做网页自动化实验，不作为稳定后端。
+- **实现 V0.10 speedtest.cn browser automation 实验功能**：新增 parser、Playwright 延迟 import 实验模块、高级功能入口和 mock tests。
 - **保留以下高级功能**：指定 Ookla server id 测速、关键词筛选、运营商/城市预设、保存默认服务器、查看/清除测速配置、测速摘要、测速后端信息、Ookla selection details。
 - **新增测速质量诊断**：`get_speedtest_quality_details()` — 按触发条件（高 ping、高 jitter、丢包、低 download、TUN/VPN）返回针对性建议。
 - **新增 ISP 预设关键词优化**：`build_isp_preset_keywords()` — China Mobile 优先关键词不含 Hong Kong，Guangzhou/Guangdong 优先排序，Hong Kong 仅作为最后 fallback 并显示警告。
-- **最新验证**：文档更新后 `pytest -q` / `python -m pytest -q` 均为 99 passed，`git diff --check` 通过。
+- **最新验证**：V0.10 实验功能实现后 `pytest -q` / `python -m pytest -q` 均为 125 passed，`git diff --check` 通过。
 - **README 和 docs/handoff-to-claude.md 已更新相关边界说明**。
 
-当前代码版本：**V0.8.3**。文档 Roadmap 已新增 **V0.10.0** 实验设计。最近提交：
+当前包版本请以 `pyproject.toml` / `netwatch/__init__.py` 为准；V0.10 实验功能已实现但不作为稳定后端。最近提交：
 
 ```
 27e097d refactor: Remove manual speedtest.cn entry, reorganize advanced menu
@@ -38,7 +39,8 @@
 9. 显示 Ookla server selection details
 10. LibreSpeed 自定义服务器列表测速
 11. 打开 speedtest.cn 网页对照测速
-12. 返回主菜单
+12. 实验：自动浏览器测速 speedtest.cn
+13. 返回主菜单
 ```
 
 对应函数均在 `netwatch/cli.py` 中。
@@ -48,8 +50,8 @@
 - **Official Ookla CLI**：默认通用测速后端（`netwatch/speedtest_backends/ookla_cli.py`）。使用绝对路径 `/opt/homebrew/bin/speedtest`，已验证可区分 `.venv/bin/speedtest` 的 Python shadow。
 - **Python speedtest-cli**：仅作为 fallback（`netwatch/speedtest_backends/python_speedtest.py`），结果可能偏低，已标注提示。
 - **LibreSpeed CLI**：开源备选后端（`netwatch/speedtest_backends/librespeed_cli.py`），V0.9 支持 `--server-json <url>` / `--local-json <file>` 自定义服务器列表，可保存常用配置。公共节点质量不保证，自建节点最可靠。
-- **speedtest.cn**：只是浏览器网页对照入口，**不是 CLI 后端**。不使用、不调用、不抓包、不逆向 speedtest.cn 私有 API。未来如有 speedtest.cn 官方 SDK/API 授权，可作为独立后端接入。
-- **Playwright 自动浏览器测速**：V0.10 实验方向，设计见 `docs/speedtest-cn-browser-automation.md`。只允许模拟用户打开网页、点击测速并读取 DOM 文本；不抓包、不调用私有 API、不绕过验证码/风控、不在当前稳定菜单里实现。
+- **speedtest.cn 网页对照**：只是打开网页，**不是 CLI 后端**。不使用、不调用、不抓包、不逆向 speedtest.cn 私有 API。未来如有 speedtest.cn 官方 SDK/API 授权，可作为独立后端接入。
+- **Playwright 自动浏览器测速**：V0.10 实验功能，设计见 `docs/speedtest-cn-browser-automation.md`。只允许模拟用户打开网页、点击测速并读取 DOM 文本；不抓包、不调用私有 API、不绕过验证码/风控；只放在高级功能实验入口，不接入默认“带宽测速”。
 - **iperf3 / HTTP file download test**：后续更现实的可控测速方向。
 
 ## 4. 已知真实网络现象
@@ -76,7 +78,11 @@
 | `netwatch/speedtest_backends/ookla_cli.py` | 官方 Ookla CLI 后端 |
 | `netwatch/speedtest_backends/python_speedtest.py` | Python speedtest-cli fallback |
 | `netwatch/speedtest_backends/librespeed_cli.py` | LibreSpeed CLI 后端，支持自定义 server-json/local-json |
+| `netwatch/speedtest_cn.py` | speedtest.cn browser automation 结果结构和 DOM 文本 parser |
+| `netwatch/speedtest_cn_browser.py` | Playwright 实验模块，延迟 import，可选 screenshot debug |
 | `tests/test_speedtest_backends.py` | 测速相关测试（含后端、LibreSpeed custom list、质量诊断、ISP 预设、网页对照） |
+| `tests/test_speedtest_cn.py` | speedtest.cn parser 和 CLI 实验入口 mock tests |
+| `tests/test_speedtest_cn_browser.py` | Playwright missing dependency、mock browser、timeout、Ctrl+C、screenshot path tests |
 | `tests/test_proxy_probe.py` | 出口 IP 检测测试 |
 | `tests/test_config.py` | 配置读写测试 |
 | `tests/test_router.py` | 路由器相关测试 |
@@ -116,20 +122,25 @@
   - 不调用私有 API。
   - 不绕过验证码/风控。
   - 不作为默认功能。
+- [x] 实现 Playwright speedtest.cn browser automation 实验功能：
+  - Parser + mock tests。
+  - Playwright sync API 延迟 import。
+  - 高级功能实验入口。
+  - 可见浏览器 debug 模式。
+  - 可选 screenshot debug。
 - [ ] iperf3 局域网/自控服务器测速。
 
 ### V0.10 Roadmap
 
-- V0.10.0：只新增 `speedtest.cn` browser automation 设计文档。
-- V0.10.1：实现 parser + mock tests。
-- V0.10.2：实现 Playwright 实验模块，但不进默认主流程。
-- V0.10.3：可选 `headless=False` 调试模式。
-- V0.10.4：可选 screenshot debug；OCR fallback 只作为未来可能性，不默认实现。
+- V0.10.0：实现 `speedtest.cn` browser automation 实验功能，包含设计文档、parser、Playwright 实验模块、高级功能入口、mock tests、optional dependency。
+- 后续：OCR fallback 只作为未来可能性，不默认实现；如有正式 SDK/API 授权，独立设计官方后端。
 
 ## 7. 给 Codex 的注意事项
 
 - **不要逆向 speedtest.cn 私有 API**。当前以及未来都不应该对 speedtest.cn 做抓包、逆向、私有接口调用。
 - **不要把 speedtest.cn browser automation 写成官方后端**。它只是实验室方向，依赖页面结构，可能因广告、弹窗、验证码或页面改版失败。
+- **不要让默认测试真实访问 speedtest.cn 或真实启动浏览器**。Playwright 测试必须 mock。
+- **不要保存 Cookie、公网 IP 或浏览器会话数据**。Debug screenshot 只有用户确认时才写入 `~/.netwatch/debug/`，不要提交 Git。
 - **不要承诺 CLI 一定能跑满千兆**。Ookla server pool 与 speedtest.cn server pool 不同是客观事实。
 - **不要把 Ookla 低速误判为用户网络差**。当前质量诊断已经区分"服务器距离远/选服不佳"和"本地网络差"。
 - **不要重新加入手动录入 speedtest.cn 结果**。这个功能已被删除，体验差且无自动化价值。

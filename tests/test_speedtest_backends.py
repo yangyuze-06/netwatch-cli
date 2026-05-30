@@ -857,10 +857,10 @@ def test_show_auto_speedtest_smoke_no_crash(monkeypatch) -> None:
 # --- speedtest.cn web reference test ---
 
 
-def test_show_open_speedtest_cn_calls_webbrowser(monkeypatch) -> None:
-    """show_open_speedtest_cn must call webbrowser.open and not enter manual flow."""
+def test_open_speedtest_cn_reference_calls_webbrowser(monkeypatch) -> None:
+    """open_speedtest_cn_reference must call webbrowser.open and not enter manual flow."""
     import io
-    from netwatch.cli import show_open_speedtest_cn, Console
+    from netwatch.cli import open_speedtest_cn_reference, Console
 
     called_urls = []
 
@@ -878,7 +878,7 @@ def test_show_open_speedtest_cn_calls_webbrowser(monkeypatch) -> None:
     original_console = cli_mod.console
     cli_mod.console = console
     try:
-        show_open_speedtest_cn()
+        open_speedtest_cn_reference()
     finally:
         cli_mod.console = original_console
 
