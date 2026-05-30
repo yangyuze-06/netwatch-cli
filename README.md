@@ -81,9 +81,9 @@ Ookla、LibreSpeed 和 `speedtest.cn` 的服务器池不同。某个后端测速
 
 `speedtest.cn` 只作为网页对照入口。本项目不逆向 `speedtest.cn` 私有 API，不抓取隐藏接口，也不支持手动粘贴测速结果回填。
 
-V0.10 增加了实验功能：`speedtest.cn` browser automation。它默认以 `headless=True` 后台启动 Playwright/Chromium，不打开可见浏览器窗口；只在用户明确选择 debug 可见浏览器模式时才使用 `headless=False`。它会打开网页、点击测速并从 DOM 文本读取结果，但不等同于官方 API 后端，不抓包、不读取 Cookie、不逆向私有接口，也不会进入默认带宽测速主流程。当前稳定后端仍是 Ookla / LibreSpeed / Python fallback。
+V0.10 增加了实验功能：`speedtest.cn` browser automation。当前 CLI 入口只提供后台 headless 实验测速，不打开可见浏览器窗口，也不保存截图；debug / 可见浏览器 / screenshot 交互不再暴露给普通用户。它会打开网页、点击测速并从 DOM 文本读取结果，但不等同于官方 API 后端，不抓包、不读取 Cookie、不逆向私有接口，也不会进入默认带宽测速主流程。当前稳定后端仍是 Ookla / LibreSpeed / Python fallback。
 
-`speedtest.cn` 开始测速前可能出现页面内提醒弹窗，实验功能会尝试点击“不再提醒”或“继续测速”。它还会给 Playwright browser context 授予 geolocation 权限，并使用默认模拟位置（广州）避免浏览器权限弹窗阻塞测速；不会读取或保存用户真实位置。
+`speedtest.cn` 开始测速前可能出现页面内提醒弹窗，实验功能会尝试点击“不再提醒”或“继续测速”。地理位置权限和默认模拟位置属于浏览器自动化内部实现细节，用于避免权限弹窗阻塞测速；普通用户路径不会显示这些细节，也不会读取或保存用户真实位置。
 
 启用该实验功能需要可选依赖：
 
@@ -99,9 +99,9 @@ pip install playwright
 playwright install chromium
 ```
 
-默认不保存截图。只有用户在实验入口中确认保存 debug screenshot 时，才会写入 `~/.netwatch/debug/`；截图可能包含页面状态，不要上传或提交到 Git。Debug screenshot 和可见浏览器是两个独立选项，保存截图不代表浏览器会变成可见窗口。
+当前 CLI 入口不保存截图。若未来需要开发者调试模式，应重新设计隐藏或开发者专用入口，避免干扰普通测速流程。
 
-`speedtest.cn` 页面/CDN 可能对 headless Chromium、HTTP/2 或自动化环境不友好，已知失败模式包括 `ERR_HTTP2_PROTOCOL_ERROR`。工具会先在 headless 模式下用兼容参数自动重试一次；如果仍失败，只会询问是否切换到可见浏览器调试模式，不会静默打开可见窗口。
+`speedtest.cn` 页面/CDN 可能对 headless Chromium、HTTP/2 或自动化环境不友好，已知失败模式包括 `ERR_HTTP2_PROTOCOL_ERROR`。工具会先在 headless 模式下用兼容参数自动重试一次；如果仍失败，会提示使用 `speedtest.cn` 网页对照测速，或改用 Ookla / LibreSpeed 后端，不会静默打开可见窗口。
 
 ## 配置
 

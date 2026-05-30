@@ -240,7 +240,7 @@ def test_show_speedtest_cn_browser_automation_cancel_does_not_run(monkeypatch) -
 def test_show_speedtest_cn_browser_automation_prints_result(monkeypatch) -> None:
     from netwatch import cli as cli_mod
 
-    answers = iter(["y", "n", "n"])
+    answers = iter(["y"])
     calls = []
     monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: next(answers))
 
@@ -269,18 +269,27 @@ def test_show_speedtest_cn_browser_automation_prints_result(monkeypatch) -> None
     assert calls
     assert calls[0].headless is True
     assert calls[0].debug_screenshot is False
-    assert "headless=True" in output
+    assert "headless=True" not in output
+    assert "debug_screenshot" not in output
+    assert "模拟位置" not in output
+    assert "geolocation" not in output
     assert "speedtest.cn Browser Automation" in output
     assert "717.68 Mbps / 89.71 MB/s" in output
-    assert "不是 speedtest.cn 官方 API 后端" in output
+    assert "来源：speedtest.cn 浏览器自动化实验结果，非官方 API。" in output
 
 
-def run_speedtest_cn_browser_cli_with_answers(monkeypatch, answers):
+def run_speedtest_cn_browser_cli_with_answers(monkeypatch, answers, result=None):
     from netwatch import cli as cli_mod
 
     calls = []
+    prompts = []
     answer_iter = iter(answers)
-    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: next(answer_iter))
+
+    def fake_prompt(prompt, *args, **kwargs):
+        prompts.append(prompt)
+        return next(answer_iter)
+
+    monkeypatch.setattr(cli_mod.Prompt, "ask", fake_prompt)
 
     def fail_webbrowser_open(url):
         raise AssertionError(f"experimental automation must not call webbrowser.open: {url}")
@@ -289,6 +298,8 @@ def run_speedtest_cn_browser_cli_with_answers(monkeypatch, answers):
 
     def fake_run(options):
         calls.append(options)
+        if result is not None:
+            return result
         return SpeedtestCnResult(download_mbps=1, upload_mbps=1, ping_ms=1)
 
     monkeypatch.setattr(cli_mod, "run_speedtest_cn_browser_automation", fake_run)
@@ -300,10 +311,10 @@ def run_speedtest_cn_browser_cli_with_answers(monkeypatch, answers):
         cli_mod.show_speedtest_cn_browser_automation()
     finally:
         cli_mod.console = original_console
-    return calls, buf.getvalue()
+    return calls, buf.getvalue(), prompts
 
 
-def test_speedtest_cn_browser_cli_default_debug_prompt_is_headless(monkeypatch) -> None:
+def test_speedtest_cn_browser_cli_default_options_are_headless_without_screenshot(monkeypatch) -> None:
     from netwatch import cli as cli_mod
 
     calls = []
@@ -327,38 +338,47 @@ def test_speedtest_cn_browser_cli_default_debug_prompt_is_headless(monkeypatch) 
     cli_mod.show_speedtest_cn_browser_automation()
 
     assert calls[0].headless is True
+    assert calls[0].debug_screenshot is False
     assert calls[0].timeout_seconds == 90
 
 
-def test_speedtest_cn_browser_cli_n_keeps_headless(monkeypatch) -> None:
-    calls, output = run_speedtest_cn_browser_cli_with_answers(monkeypatch, ["y", "n", "n"])
+def test_speedtest_cn_browser_cli_only_asks_continue_prompt(monkeypatch) -> None:
+    calls, output, prompts = run_speedtest_cn_browser_cli_with_answers(monkeypatch, ["y"])
 
     assert calls[0].headless is True
-    assert "实验测速将以 headless 后台模式运行，不会打开可见浏览器窗口" in output
-    assert "正在以后台模式启动浏览器" in output
+    assert calls[0].debug_screenshot is False
+    assert prompts == ["是否继续？"]
+    assert "正在后台启动浏览器" in output
+    assert "进入 debug 模式" not in "\n".join(prompts)
+    assert "保存 debug screenshot" not in "\n".join(prompts)
+    assert "使用可见浏览器调试" not in "\n".join(prompts)
+    assert "headless=True" not in output
+    assert "headless=" not in output
+    assert "debug_screenshot" not in output
+    assert "screenshot path" not in output
+    assert "模拟位置" not in output
+    assert "geolocation" not in output
 
 
-def test_speedtest_cn_browser_cli_y_uses_visible_debug_browser(monkeypatch) -> None:
-    calls, output = run_speedtest_cn_browser_cli_with_answers(monkeypatch, ["y", "y", "n"])
+def test_speedtest_cn_browser_cli_never_prints_screenshot_path(monkeypatch) -> None:
+    result = SpeedtestCnResult(
+        download_mbps=1,
+        upload_mbps=1,
+        ping_ms=1,
+        debug_screenshot_path="/tmp/speedtest-cn-debug.png",
+    )
+    normal_calls, normal_output, _ = run_speedtest_cn_browser_cli_with_answers(monkeypatch, ["y"], result=result)
 
-    assert calls[0].headless is False
-    assert "你已选择可见浏览器调试模式，将打开浏览器窗口" in output
-    assert "正在以可见浏览器调试模式启动浏览器" in output
-
-
-def test_speedtest_cn_browser_cli_debug_screenshot_does_not_change_headless(monkeypatch) -> None:
-    calls, output = run_speedtest_cn_browser_cli_with_answers(monkeypatch, ["y", "n", "y"])
-
-    assert calls[0].headless is True
-    assert calls[0].debug_screenshot is True
-    assert "debug_screenshot=True" in output
-    assert "正在以后台模式启动浏览器" in output
+    assert normal_calls[0].headless is True
+    assert normal_calls[0].debug_screenshot is False
+    assert "/tmp/speedtest-cn-debug.png" not in normal_output
+    assert "Debug screenshot" not in normal_output
 
 
 def test_speedtest_cn_browser_cli_error_does_not_open_webbrowser(monkeypatch) -> None:
     from netwatch import cli as cli_mod
 
-    answers = iter(["y", "n", "n"])
+    answers = iter(["y"])
     calls = []
     monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: next(answers))
     monkeypatch.setattr(
@@ -378,70 +398,32 @@ def test_speedtest_cn_browser_cli_error_does_not_open_webbrowser(monkeypatch) ->
     assert calls[0].headless is True
 
 
-def test_speedtest_cn_browser_cli_headless_http2_error_declines_visible_retry(monkeypatch) -> None:
-    from netwatch import cli as cli_mod
-
-    answers = iter(["y", "n", "y", "n"])
-    calls = []
-    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: next(answers))
-    monkeypatch.setattr(
-        "webbrowser.open",
-        lambda url: (_ for _ in ()).throw(AssertionError(f"unexpected webbrowser.open: {url}")),
+def test_speedtest_cn_browser_cli_normal_error_is_short_without_traceback(monkeypatch) -> None:
+    error = "Page.goto failed\nTraceback (most recent call last):\n  File example.py"
+    calls, output, _ = run_speedtest_cn_browser_cli_with_answers(
+        monkeypatch,
+        ["y"],
+        result=SpeedtestCnResult(error=error),
     )
 
-    def fake_run(options):
-        calls.append(options)
-        return SpeedtestCnResult(error="speedtest.cn 在 headless Chromium 下访问失败：ERR_HTTP2_PROTOCOL_ERROR。")
+    assert calls[0].headless is True
+    assert calls[0].debug_screenshot is False
+    assert "speedtest.cn 浏览器自动化失败：Page.goto failed" in output
+    assert "Traceback" not in output
+    assert "详细错误" not in output
 
-    monkeypatch.setattr(cli_mod, "run_speedtest_cn_browser_automation", fake_run)
-    buf = io.StringIO()
-    console = Console(file=buf, force_terminal=False, width=140)
-    original_console = cli_mod.console
-    cli_mod.console = console
-    try:
-        cli_mod.show_speedtest_cn_browser_automation()
-    finally:
-        cli_mod.console = original_console
 
-    output = buf.getvalue()
+def test_speedtest_cn_browser_cli_headless_http2_error_does_not_retry_visible_browser(monkeypatch) -> None:
+    calls, output, prompts = run_speedtest_cn_browser_cli_with_answers(
+        monkeypatch,
+        ["y"],
+        result=SpeedtestCnResult(error="speedtest.cn 在 headless Chromium 下访问失败：ERR_HTTP2_PROTOCOL_ERROR。"),
+    )
+
     assert len(calls) == 1
     assert calls[0].headless is True
-    assert calls[0].debug_screenshot is True
-    assert "后台浏览器访问 speedtest.cn 失败" in output
+    assert calls[0].debug_screenshot is False
+    assert prompts == ["是否继续？"]
     assert "ERR_HTTP2_PROTOCOL_ERROR" in output
-
-
-def test_speedtest_cn_browser_cli_headless_http2_error_retries_visible_only_after_yes(monkeypatch) -> None:
-    from netwatch import cli as cli_mod
-
-    answers = iter(["y", "n", "y", "y"])
-    calls = []
-    monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: next(answers))
-    monkeypatch.setattr(
-        "webbrowser.open",
-        lambda url: (_ for _ in ()).throw(AssertionError(f"unexpected webbrowser.open: {url}")),
-    )
-
-    def fake_run(options):
-        calls.append(options)
-        if len(calls) == 1:
-            return SpeedtestCnResult(error="speedtest.cn 在 headless Chromium 下访问失败：ERR_HTTP2_PROTOCOL_ERROR。")
-        return SpeedtestCnResult(download_mbps=100, upload_mbps=20, ping_ms=8)
-
-    monkeypatch.setattr(cli_mod, "run_speedtest_cn_browser_automation", fake_run)
-    buf = io.StringIO()
-    console = Console(file=buf, force_terminal=False, width=140)
-    original_console = cli_mod.console
-    cli_mod.console = console
-    try:
-        cli_mod.show_speedtest_cn_browser_automation()
-    finally:
-        cli_mod.console = original_console
-
-    output = buf.getvalue()
-    assert len(calls) == 2
-    assert calls[0].headless is True
-    assert calls[1].headless is False
-    assert calls[1].debug_screenshot is True
-    assert "你已选择可见浏览器调试模式，将打开浏览器窗口" in output
-    assert "speedtest.cn Browser Automation" in output
+    assert "是否切换到可见浏览器调试模式重试" not in output
+    assert "Debug mode enabled" not in output

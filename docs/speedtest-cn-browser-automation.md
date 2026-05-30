@@ -40,8 +40,9 @@ CLI 场景中直接面对网页广告和复杂页面。
 当前实现：
 
 - 使用 Playwright Python。
-- 默认 `headless=True` 后台运行，不打开可见浏览器窗口。
-- 只有用户明确选择 debug 可见浏览器模式时才使用 `headless=False`，方便观察页面行为。
+- 当前 CLI 入口固定 `headless=True` 后台运行，不打开可见浏览器窗口。
+- 当前 CLI 入口固定 `debug_screenshot=False`，不保存截图。
+- CLI 不暴露 debug / 可见浏览器 / screenshot 交互，也不显示 headless、screenshot、geolocation 等实现细节。
 - Browser context 使用桌面 Chrome UA、`1440x900` viewport、`zh-CN` locale、`Asia/Shanghai` timezone 和 `Accept-Language` 头，尽量贴近普通桌面浏览器。
 - Browser context 授予 `geolocation` 权限，并使用默认模拟位置（广州：`113.2644, 23.1291`）避免浏览器地理位置权限弹窗阻塞测速。
 - 不读取、不保存用户真实位置。
@@ -54,8 +55,7 @@ CLI 场景中直接面对网页广告和复杂页面。
 - 等待 20~90 秒，或等待结果文本稳定。
 - 使用 `page.locator("body").inner_text()` 读取 DOM 文本。
 - 用 parser 从文本提取测速结果。
-- 可选保存 screenshot 到 `~/.netwatch/debug/` 作为调试证据。
-- Debug screenshot 和 visible browser 是两个独立选项；保存截图不意味着浏览器可见。
+- 底层 `BrowserAutomationOptions` 仍可保留 `headless` / `debug_screenshot` 字段，供未来开发者模式重新设计；当前 CLI 不使用这些选项。
 - Playwright 是 optional dependency，不在默认安装依赖中强制安装。
 
 该方案只模拟用户打开网页并点击测速，不调用网页内部私有接口，不读取网络请求
@@ -85,8 +85,7 @@ playwright install chromium
 - DOM 文本解析。
 - 失败时返回友好错误，不抛出 traceback 给用户。
 - 高级功能实验入口。
-- 可见浏览器 debug 模式，默认关闭。
-- 可选 debug screenshot。
+- CLI 入口固定后台运行，不暴露 debug 模式或 screenshot 交互。
 
 第一版不做：
 
@@ -136,16 +135,16 @@ Parser 支持从页面文本里解析：
 运行前提示：
 
 ```text
-这是实验功能，会启动后台浏览器访问 speedtest.cn。
-本功能不会调用 speedtest.cn 私有 API。
-页面结构变化、广告、验证码或反自动化策略可能导致失败。
+这是实验功能，会在后台浏览器中访问 speedtest.cn 并尝试读取测速结果。
+本功能不调用 speedtest.cn 私有 API，页面结构变化可能导致失败。
 是否继续？[y/N]
 ```
 
+确认后 CLI 直接使用 `headless=True`、`debug_screenshot=False` 的后台实验测速，不打开可见浏览器，不保存截图，不显示地理位置权限或模拟位置等实现细节。
+
 运行时提示：
 
-- 正在以后台模式启动浏览器...
-- 正在以可见浏览器调试模式启动浏览器...
+- 正在后台启动浏览器...
 - 正在打开 speedtest.cn...
 - 正在等待测速按钮...
 - 正在开始测速...
@@ -169,12 +168,11 @@ Parser 支持从页面文本里解析：
 
 建议用户：
 
-- 使用 `headless=False` 调试。
 - 使用 `speedtest.cn` 网页手动对照。
 - 使用 Ookla / LibreSpeed 后端。
 
 错误信息应面向用户解释原因和下一步选择，不暴露长 traceback。
-如果 headless 兼容重试仍失败，CLI 只会询问是否切换到可见浏览器调试模式；只有用户明确输入 `y` 时才会打开可见浏览器，不会静默打开窗口。
+如果 headless 兼容重试仍失败，CLI 不会询问切换到可见浏览器，也不会静默打开窗口。未来如需 debug，应通过开发者模式重新设计。
 
 ## 8. 安全和合规边界
 
@@ -188,9 +186,8 @@ Parser 支持从页面文本里解析：
 - 不高频循环测速。
 - 不作为官方 `speedtest.cn` 后端。
 - 不把浏览器自动化结果宣传为稳定、官方或可长期依赖。
-- Debug screenshot 默认关闭；开启后截图写入 `~/.netwatch/debug/`，可能包含页面状态，不要上传或提交到 Git。
-- Debug screenshot 不改变 `headless` 设置；截图开启且未选择可见浏览器时，仍然后台运行。
-- Headless 失败不会自动降级到可见浏览器；可见窗口必须由用户确认。
+- 当前 CLI 入口不保存 debug screenshot。
+- 当前 CLI 入口不会降级到可见浏览器，也不会静默打开窗口。
 
 如果未来有 `speedtest.cn` 正式 SDK/API 授权，应作为独立后端接入，并与本实验
 功能分开设计、分开测试、分开文档说明。
@@ -207,7 +204,9 @@ Parser 支持从页面文本里解析：
 - Failure path。
 - Mock browser DOM success path。
 - Timeout / KeyboardInterrupt path。
-- Debug screenshot path。
+- CLI 只询问是否继续。
+- CLI 固定传入 `headless=True` 和 `debug_screenshot=False`。
+- CLI 普通输出不泄露 debug、screenshot、geolocation 或 traceback。
 
 真实浏览器测试只作为手动实验，不放进默认 CI。所有公网测速、浏览器访问和
 外部页面行为都不能成为默认测试依赖。
@@ -220,8 +219,12 @@ V0.10.0:
 - 实现 parser + mock tests。
 - 实现 Playwright 实验模块，但不进默认主流程。
 - 增加高级功能实验入口。
-- 支持可选 `headless=False` 调试模式。
-- 支持可选 screenshot debug。
+- CLI 入口固定后台运行。
+
+V0.10.2:
+
+- 移除用户可见 debug / 可见浏览器 / screenshot 交互。
+- 失败时建议使用 `speedtest.cn` 网页对照测速或 Ookla / LibreSpeed 后端。
 
 后续可能方向：
 

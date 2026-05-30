@@ -12,6 +12,7 @@
 - **明确不逆向 speedtest.cn 私有 API**。
 - **新增 V0.10 实验设计文档**：`docs/speedtest-cn-browser-automation.md` 记录 Playwright browser automation 实验方向，只做网页自动化实验，不作为稳定后端。
 - **实现 V0.10 speedtest.cn browser automation 实验功能**：新增 parser、Playwright 延迟 import 实验模块、高级功能入口和 mock tests。
+- **V0.10.2 CLI 体验简化**：speedtest.cn browser automation 实验入口只询问是否继续；确认后固定后台 headless 运行，不暴露 debug / 可见浏览器 / screenshot 交互。
 - **保留以下高级功能**：指定 Ookla server id 测速、关键词筛选、运营商/城市预设、保存默认服务器、查看/清除测速配置、测速摘要、测速后端信息、Ookla selection details。
 - **新增测速质量诊断**：`get_speedtest_quality_details()` — 按触发条件（高 ping、高 jitter、丢包、低 download、TUN/VPN）返回针对性建议。
 - **新增 ISP 预设关键词优化**：`build_isp_preset_keywords()` — China Mobile 优先关键词不含 Hong Kong，Guangzhou/Guangdong 优先排序，Hong Kong 仅作为最后 fallback 并显示警告。
@@ -52,6 +53,7 @@
 - **LibreSpeed CLI**：开源备选后端（`netwatch/speedtest_backends/librespeed_cli.py`），V0.9 支持 `--server-json <url>` / `--local-json <file>` 自定义服务器列表，可保存常用配置。公共节点质量不保证，自建节点最可靠。
 - **speedtest.cn 网页对照**：只是打开网页，**不是 CLI 后端**。不使用、不调用、不抓包、不逆向 speedtest.cn 私有 API。未来如有 speedtest.cn 官方 SDK/API 授权，可作为独立后端接入。
 - **Playwright 自动浏览器测速**：V0.10 实验功能，设计见 `docs/speedtest-cn-browser-automation.md`。只允许模拟用户打开网页、点击测速并读取 DOM 文本；不抓包、不调用私有 API、不绕过验证码/风控；只放在高级功能实验入口，不接入默认“带宽测速”。
+- **CLI 调试边界**：当前用户入口不提供可见浏览器或 screenshot 选项；如未来需要 debug，应作为开发者模式重新设计。
 - **iperf3 / HTTP file download test**：后续更现实的可控测速方向。
 
 ## 4. 已知真实网络现象
@@ -126,8 +128,7 @@
   - Parser + mock tests。
   - Playwright sync API 延迟 import。
   - 高级功能实验入口。
-  - 可见浏览器 debug 模式。
-  - 可选 screenshot debug。
+  - CLI 入口固定后台运行，不暴露 debug / 可见浏览器 / screenshot 交互。
 - [ ] iperf3 局域网/自控服务器测速。
 
 ### V0.10 Roadmap
