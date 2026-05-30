@@ -10,13 +10,14 @@
 - **speedtest.cn 只保留"打开网页对照测速"**：`show_open_speedtest_cn()` 使用 `webbrowser.open()`，不询问用户粘贴结果，不要求手动录入。
 - **明确 netwatch-cli 不自动读取 speedtest.cn 网页结果**：文档和代码注释中已写明。
 - **明确不逆向 speedtest.cn 私有 API**。
+- **新增 V0.10 实验设计文档**：`docs/speedtest-cn-browser-automation.md` 记录未来 Playwright browser automation 方向，只做网页自动化实验，不作为稳定后端。
 - **保留以下高级功能**：指定 Ookla server id 测速、关键词筛选、运营商/城市预设、保存默认服务器、查看/清除测速配置、测速摘要、测速后端信息、Ookla selection details。
 - **新增测速质量诊断**：`get_speedtest_quality_details()` — 按触发条件（高 ping、高 jitter、丢包、低 download、TUN/VPN）返回针对性建议。
 - **新增 ISP 预设关键词优化**：`build_isp_preset_keywords()` — China Mobile 优先关键词不含 Hong Kong，Guangzhou/Guangdong 优先排序，Hong Kong 仅作为最后 fallback 并显示警告。
-- **测试通过：58 passed**。
+- **最新验证**：文档更新后 `pytest -q` / `python -m pytest -q` 均为 99 passed，`git diff --check` 通过。
 - **README 和 docs/handoff-to-claude.md 已更新相关边界说明**。
 
-当前版本：**V0.8.3**。最近提交：
+当前代码版本：**V0.8.3**。文档 Roadmap 已新增 **V0.10.0** 实验设计。最近提交：
 
 ```
 27e097d refactor: Remove manual speedtest.cn entry, reorganize advanced menu
@@ -48,7 +49,7 @@
 - **Python speedtest-cli**：仅作为 fallback（`netwatch/speedtest_backends/python_speedtest.py`），结果可能偏低，已标注提示。
 - **LibreSpeed CLI**：开源备选后端（`netwatch/speedtest_backends/librespeed_cli.py`），V0.9 支持 `--server-json <url>` / `--local-json <file>` 自定义服务器列表，可保存常用配置。公共节点质量不保证，自建节点最可靠。
 - **speedtest.cn**：只是浏览器网页对照入口，**不是 CLI 后端**。不使用、不调用、不抓包、不逆向 speedtest.cn 私有 API。未来如有 speedtest.cn 官方 SDK/API 授权，可作为独立后端接入。
-- **Playwright 自动浏览器测速**：未来实验方向，不在当前稳定菜单里实现。
+- **Playwright 自动浏览器测速**：V0.10 实验方向，设计见 `docs/speedtest-cn-browser-automation.md`。只允许模拟用户打开网页、点击测速并读取 DOM 文本；不抓包、不调用私有 API、不绕过验证码/风控、不在当前稳定菜单里实现。
 - **iperf3 / HTTP file download test**：后续更现实的可控测速方向。
 
 ## 4. 已知真实网络现象
@@ -107,7 +108,7 @@
   - 说明结果取决于文件服务器质量。
 
 ### P3
-- [ ] 设计 Playwright speedtest.cn browser automation 实验功能文档：
+- [x] 设计 Playwright speedtest.cn browser automation 实验功能文档：
   - 后台浏览器打开 speedtest.cn。
   - 自动点击测速。
   - 优先读取 DOM 文本。
@@ -117,9 +118,18 @@
   - 不作为默认功能。
 - [ ] iperf3 局域网/自控服务器测速。
 
+### V0.10 Roadmap
+
+- V0.10.0：只新增 `speedtest.cn` browser automation 设计文档。
+- V0.10.1：实现 parser + mock tests。
+- V0.10.2：实现 Playwright 实验模块，但不进默认主流程。
+- V0.10.3：可选 `headless=False` 调试模式。
+- V0.10.4：可选 screenshot debug；OCR fallback 只作为未来可能性，不默认实现。
+
 ## 7. 给 Codex 的注意事项
 
 - **不要逆向 speedtest.cn 私有 API**。当前以及未来都不应该对 speedtest.cn 做抓包、逆向、私有接口调用。
+- **不要把 speedtest.cn browser automation 写成官方后端**。它只是实验室方向，依赖页面结构，可能因广告、弹窗、验证码或页面改版失败。
 - **不要承诺 CLI 一定能跑满千兆**。Ookla server pool 与 speedtest.cn server pool 不同是客观事实。
 - **不要把 Ookla 低速误判为用户网络差**。当前质量诊断已经区分"服务器距离远/选服不佳"和"本地网络差"。
 - **不要重新加入手动录入 speedtest.cn 结果**。这个功能已被删除，体验差且无自动化价值。
@@ -132,9 +142,10 @@
   python -m compileall netwatch
   pytest -q
   python -m pytest -q
+  git diff --check
   ```
 - **小步提交，不要大重构**。
-- **接手前先读文档**：README.md → AGENTS.md → CLAUDE.md → docs/handoff-to-codex.md → docs/handoff-to-claude.md。
+- **接手前先读文档**：README.md → AGENTS.md → CLAUDE.md → docs/handoff-to-codex.md → docs/handoff-to-claude.md → docs/speedtest-cn-browser-automation.md。
 
 ## 8. Suggested Prompt for Codex
 

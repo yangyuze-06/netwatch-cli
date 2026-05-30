@@ -22,6 +22,7 @@ python -m netwatch.cli
 python -m compileall netwatch
 pytest -q
 python -m pytest -q
+git diff --check
 ```
 
 ## 当前重点
@@ -32,6 +33,7 @@ python -m pytest -q
 - 支持 LibreSpeed custom server list，并说明公共节点质量不保证。
 - 做测速结果质量诊断。
 - 保留 Python speedtest-cli fallback，但明确提示结果可能偏低。
+- 设计 V0.10 `speedtest.cn` browser automation 实验方向，但不作为稳定后端。
 
 ## 接手前必读
 
@@ -41,9 +43,12 @@ python -m pytest -q
 - `docs/v0.8.2-plan.md`
 - `docs/v0.8.3-plan.md`
 - `docs/v0.9-plan.md`
+- `docs/speedtest-cn-browser-automation.md`
 
 ## 当前禁止
 
 - 不要重新加入 speedtest.cn 手动录入/粘贴结果功能（已删除）。
 - 不要逆向 speedtest.cn 私有 API。
+- 不要把 speedtest.cn browser automation 当成官方 API 后端。
+- 不要为了实验功能引入默认主菜单入口或默认依赖 Playwright。
 - 不要大重构。

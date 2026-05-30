@@ -80,6 +80,8 @@ Ookla、LibreSpeed 和 `speedtest.cn` 的服务器池不同。某个后端测速
 
 `speedtest.cn` 只作为网页对照入口。本项目不逆向 `speedtest.cn` 私有 API，不抓取隐藏接口，也不支持手动粘贴测速结果回填。
 
+未来 V0.10 实验方向会评估 `speedtest.cn` browser automation：后台浏览器打开网页、点击测速并从 DOM 文本读取结果。它不等同于官方 API 后端，也不会进入默认带宽测速主流程。当前稳定后端仍是 Ookla / LibreSpeed / Python fallback。
+
 ## 配置
 
 配置文件：
@@ -121,3 +123,4 @@ python -m pytest -q
 - [V0.8.3 plan](docs/v0.8.3-plan.md)
 - [V0.9 plan](docs/v0.9-plan.md)
 - [V0.9.3 plan](docs/v0.9.3-plan.md)
+- [speedtest.cn browser automation experiment](docs/speedtest-cn-browser-automation.md)
