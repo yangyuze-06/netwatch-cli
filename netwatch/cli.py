@@ -71,15 +71,6 @@ SPEEDTEST_STATUS_MESSAGES = (
     "正在执行上传测速...",
     "测速可能需要 10~30 秒...",
 )
-SPEEDTEST_CN_BROWSER_STATUS_MESSAGES = (
-    "正在后台启动浏览器...",
-    "正在打开 speedtest.cn...",
-    "正在等待测速按钮...",
-    "正在开始测速...",
-    "正在等待结果，大约需要 20~90 秒...",
-    "正在解析结果...",
-)
-
 
 def build_menu() -> Panel:
     """Build the main menu panel."""
@@ -668,12 +659,15 @@ def show_speedtest_cn_browser_automation() -> None:
         timeout_seconds=90,
         debug_screenshot=False,
     )
-    for message in SPEEDTEST_CN_BROWSER_STATUS_MESSAGES:
+
+    def show_progress(message: str) -> None:
         console.print(f"[dim]{message}[/dim]")
+
+    console.print("[dim]正在执行 speedtest.cn 后台测速，请稍候...[/dim]")
 
     try:
         with console.status("[bold green]speedtest.cn browser automation 进行中...[/bold green]"):
-            result = run_speedtest_cn_browser_automation(options)
+            result = run_speedtest_cn_browser_automation(options, progress_callback=show_progress)
     except KeyboardInterrupt:
         console.print("\n[yellow]已取消当前实验任务，返回高级菜单。[/yellow]")
         return

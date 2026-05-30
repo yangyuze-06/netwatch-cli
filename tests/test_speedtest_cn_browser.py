@@ -24,6 +24,8 @@ class FakeLocator:
     def click(self, **kwargs):
         if self.click_error:
             raise self.click_error
+        if kwargs.get("trial"):
+            return
         if self.page is not None and self.text is not None:
             self.page.clicked_texts.append(self.text)
 
@@ -200,6 +202,70 @@ def test_browser_automation_parses_mock_body_text(monkeypatch) -> None:
     assert manager.playwright.chromium.browser.context.closed is True
 
 
+def test_browser_automation_emits_event_driven_progress(monkeypatch) -> None:
+    page = FakePage(["Download 10 Mbps\nUpload 2 Mbps\nPing 8 ms"])
+    install_fake_playwright(monkeypatch, page)
+    progress_messages = []
+
+    result = browser_mod.run_speedtest_cn_browser_automation(
+        BrowserAutomationOptions(headless=True, timeout_seconds=3),
+        progress_callback=progress_messages.append,
+    )
+
+    assert result.error is None
+    assert progress_messages == [
+        "正在启动后台浏览器...",
+        "已打开 speedtest.cn",
+        "已处理页面提示",
+        "已找到测速按钮",
+        "已点击测速按钮，正在测速...",
+        "已检测到 Ping 结果",
+        "已检测到下载结果",
+        "已检测到上传结果",
+        "测速完成，正在生成结果...",
+    ]
+
+
+def test_browser_automation_emits_result_field_progress_once(monkeypatch) -> None:
+    page = FakePage(
+        [
+            "Ping 8 ms",
+            "Ping 8 ms\nDownload 10 Mbps",
+            "Ping 8 ms\nDownload 10 Mbps\nUpload 2 Mbps",
+        ]
+    )
+    install_fake_playwright(monkeypatch, page)
+    monkeypatch.setattr(browser_mod.time, "sleep", lambda seconds: None)
+    progress_messages = []
+
+    result = browser_mod.run_speedtest_cn_browser_automation(
+        BrowserAutomationOptions(headless=True, timeout_seconds=3),
+        progress_callback=progress_messages.append,
+    )
+
+    assert result.error is None
+    assert progress_messages.count("已检测到 Ping 结果") == 1
+    assert progress_messages.count("已检测到下载结果") == 1
+    assert progress_messages.count("已检测到上传结果") == 1
+    assert progress_messages.index("已检测到 Ping 结果") < progress_messages.index("已检测到下载结果")
+    assert progress_messages.index("已检测到下载结果") < progress_messages.index("已检测到上传结果")
+    assert progress_messages[-1] == "测速完成，正在生成结果..."
+
+
+def test_browser_automation_failure_does_not_emit_complete_progress(monkeypatch) -> None:
+    page = FakePage(["下载 1 Mbps"])
+    install_fake_playwright(monkeypatch, page)
+    progress_messages = []
+
+    result = browser_mod.run_speedtest_cn_browser_automation(
+        BrowserAutomationOptions(timeout_seconds=0),
+        progress_callback=progress_messages.append,
+    )
+
+    assert result.error is not None
+    assert "测速完成，正在生成结果..." not in progress_messages
+
+
 def test_browser_automation_context_uses_desktop_locale_headers(monkeypatch) -> None:
     page = FakePage(["Download 10 Mbps\nUpload 2 Mbps\nPing 8 ms"])
     manager = install_fake_playwright(monkeypatch, page)
@@ -337,7 +403,7 @@ def test_headless_http2_retry_still_fails_returns_friendly_error(monkeypatch) ->
 
     assert result.error is not None
     assert "ERR_HTTP2_PROTOCOL_ERROR" in result.error
-    assert "可见浏览器调试模式" in result.error
+    assert "speedtest.cn 网页对照测速" in result.error
     assert manager.playwright.chromium.headless_values == [True, True]
     assert False not in manager.playwright.chromium.headless_values
 

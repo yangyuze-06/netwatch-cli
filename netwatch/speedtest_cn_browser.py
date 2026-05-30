@@ -54,9 +54,18 @@ def is_playwright_available() -> bool:
 
 def run_speedtest_cn_browser_automation(
     options: BrowserAutomationOptions | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> SpeedtestCnResult:
     """Run experimental speedtest.cn browser automation and parse DOM text."""
     options = options or BrowserAutomationOptions()
+    emitted_progress: set[str] = set()
+
+    def emit_once(message: str) -> None:
+        if message in emitted_progress:
+            return
+        emitted_progress.add(message)
+        emit_progress(progress_callback, message)
+
     sync_playwright, playwright_timeout_error = load_sync_playwright()
     if sync_playwright is None or playwright_timeout_error is None:
         return SpeedtestCnResult(error=PLAYWRIGHT_INSTALL_HINT)
@@ -65,6 +74,7 @@ def run_speedtest_cn_browser_automation(
         options=options,
         sync_playwright=sync_playwright,
         playwright_timeout_error=playwright_timeout_error,
+        progress_callback=emit_once,
     )
     if options.headless and is_http2_protocol_error(result.error):
         retry_result = run_speedtest_cn_browser_attempt(
@@ -72,6 +82,7 @@ def run_speedtest_cn_browser_automation(
             sync_playwright=sync_playwright,
             playwright_timeout_error=playwright_timeout_error,
             launch_args=HEADLESS_HTTP2_RETRY_ARGS,
+            progress_callback=emit_once,
         )
         if retry_result.error and (is_http2_protocol_error(retry_result.error) or not retry_result.raw_text):
             retry_result.error = friendly_http2_error(retry_result.error)
@@ -87,6 +98,7 @@ def run_speedtest_cn_browser_attempt(
     sync_playwright: Callable[..., Any],
     playwright_timeout_error: type[Exception],
     launch_args: list[str] | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> SpeedtestCnResult:
     """Run one browser automation attempt."""
     browser = None
@@ -94,18 +106,21 @@ def run_speedtest_cn_browser_attempt(
     page = None
     last_text = ""
     last_parse_error = "DOM 文本无法解析。"
+    detected_fields: set[str] = set()
 
     try:
         with sync_playwright() as playwright:
             launch_kwargs: dict[str, Any] = {"headless": options.headless}
             if launch_args:
                 launch_kwargs["args"] = launch_args
+            emit_progress(progress_callback, "正在启动后台浏览器...")
             browser = playwright.chromium.launch(**launch_kwargs)
             context = browser.new_context(**DEFAULT_CONTEXT_OPTIONS)
             grant_geolocation_permission(context)
             page = context.new_page()
             try:
                 page.goto(SPEEDTEST_CN_URL, wait_until="domcontentloaded", timeout=30_000)
+                emit_progress(progress_callback, "已打开 speedtest.cn")
             except Exception as exc:
                 screenshot_path = save_debug_screenshot(page, options.debug_screenshot)
                 if isinstance(exc, playwright_timeout_error):
@@ -119,14 +134,19 @@ def run_speedtest_cn_browser_attempt(
                 )
             dismiss_common_overlays(page)
             dismiss_speedtest_cn_prompts(page)
+            emit_progress(progress_callback, "已处理页面提示")
 
-            if not click_speedtest_button(page):
+            speedtest_button = find_speedtest_button(page)
+            if speedtest_button is None:
                 screenshot_path = save_debug_screenshot(page, options.debug_screenshot)
                 return SpeedtestCnResult(
                     raw_text=get_body_text(page),
                     error=append_screenshot_path("未找到 speedtest.cn 测速按钮。", screenshot_path),
                     debug_screenshot_path=screenshot_path,
                 )
+            emit_progress(progress_callback, "已找到测速按钮")
+            speedtest_button.click(timeout=5_000)
+            emit_progress(progress_callback, "已点击测速按钮，正在测速...")
             dismiss_speedtest_cn_prompts(page)
 
             deadline = time.monotonic() + max(0, options.timeout_seconds)
@@ -134,9 +154,11 @@ def run_speedtest_cn_browser_attempt(
                 last_text = get_body_text(page)
                 parsed = parse_speedtest_cn_text(last_text)
                 last_parse_error = parsed.error or last_parse_error
+                emit_result_field_progress(progress_callback, parsed, detected_fields)
                 if parsed.download_mbps is not None and parsed.upload_mbps is not None and parsed.ping_ms is not None:
                     screenshot_path = save_debug_screenshot(page, options.debug_screenshot)
                     parsed.debug_screenshot_path = screenshot_path
+                    emit_progress(progress_callback, "测速完成，正在生成结果...")
                     return parsed
                 time.sleep(2)
 
@@ -177,6 +199,30 @@ def is_http2_protocol_error(message: str | None) -> bool:
     return "ERR_HTTP2_PROTOCOL_ERROR" in message or "net::ERR_HTTP2_PROTOCOL_ERROR" in message
 
 
+def emit_progress(callback: Callable[[str], None] | None, message: str) -> None:
+    """Emit a short progress message when a callback is registered."""
+    if callback:
+        callback(message)
+
+
+def emit_result_field_progress(
+    callback: Callable[[str], None] | None,
+    result: SpeedtestCnResult,
+    detected_fields: set[str],
+) -> None:
+    """Emit progress when result fields first appear in DOM text."""
+    field_messages = (
+        ("ping", result.ping_ms, "已检测到 Ping 结果"),
+        ("download", result.download_mbps, "已检测到下载结果"),
+        ("upload", result.upload_mbps, "已检测到上传结果"),
+    )
+    for field_name, value, message in field_messages:
+        if value is None or field_name in detected_fields:
+            continue
+        detected_fields.add(field_name)
+        emit_progress(callback, message)
+
+
 def friendly_goto_error(exc: Exception) -> str:
     """Convert a page.goto exception into a user-facing error."""
     message = str(exc)
@@ -192,10 +238,9 @@ def friendly_http2_error(message: str | None = None) -> str:
             "speedtest.cn 在 headless Chromium 下访问失败：ERR_HTTP2_PROTOCOL_ERROR。",
             "这可能是网站/CDN/HTTP2 对 headless 浏览器不兼容或限制。",
             "请尝试：",
-            "1. 使用可见浏览器调试模式。",
-            "2. 稍后重试。",
-            "3. 使用 speedtest.cn 网页对照测速。",
-            "4. 使用 Ookla / LibreSpeed 后端。",
+            "1. 稍后重试。",
+            "2. 使用 speedtest.cn 网页对照测速。",
+            "3. 使用 Ookla / LibreSpeed 后端。",
         ]
     )
 
@@ -242,8 +287,8 @@ def grant_geolocation_permission(context: Any) -> None:
         pass
 
 
-def click_speedtest_button(page: Any) -> bool:
-    """Click the first visible speedtest button from several DOM locator strategies."""
+def find_speedtest_button(page: Any) -> Any | None:
+    """Find the first visible speedtest button from several DOM locator strategies."""
     locator_factories = (
         lambda: page.get_by_text("测速", exact=True),
         lambda: page.get_by_text("开始测速"),
@@ -253,11 +298,23 @@ def click_speedtest_button(page: Any) -> bool:
     for locator_factory in locator_factories:
         try:
             locator = locator_factory()
-            locator.click(timeout=5_000)
-            return True
+            locator.click(timeout=5_000, trial=True)
+            return locator
         except Exception:
             continue
-    return False
+    return None
+
+
+def click_speedtest_button(page: Any) -> bool:
+    """Click the first visible speedtest button from several DOM locator strategies."""
+    locator = find_speedtest_button(page)
+    if locator is None:
+        return False
+    try:
+        locator.click(timeout=5_000)
+        return True
+    except Exception:
+        return False
 
 
 def first_locator(locator: Any) -> Any:

@@ -244,8 +244,10 @@ def test_show_speedtest_cn_browser_automation_prints_result(monkeypatch) -> None
     calls = []
     monkeypatch.setattr(cli_mod.Prompt, "ask", lambda *args, **kwargs: next(answers))
 
-    def fake_run(options):
+    def fake_run(options, progress_callback=None):
         calls.append(options)
+        assert progress_callback is not None
+        progress_callback("已打开 speedtest.cn")
         return SpeedtestCnResult(
             download_mbps=717.68,
             upload_mbps=64.2,
@@ -296,8 +298,10 @@ def run_speedtest_cn_browser_cli_with_answers(monkeypatch, answers, result=None)
 
     monkeypatch.setattr("webbrowser.open", fail_webbrowser_open)
 
-    def fake_run(options):
+    def fake_run(options, progress_callback=None):
         calls.append(options)
+        if progress_callback is not None:
+            progress_callback("已打开 speedtest.cn")
         if result is not None:
             return result
         return SpeedtestCnResult(download_mbps=1, upload_mbps=1, ping_ms=1)
@@ -332,7 +336,8 @@ def test_speedtest_cn_browser_cli_default_options_are_headless_without_screensho
     monkeypatch.setattr(
         cli_mod,
         "run_speedtest_cn_browser_automation",
-        lambda options: calls.append(options) or SpeedtestCnResult(download_mbps=1, upload_mbps=1, ping_ms=1),
+        lambda options, progress_callback=None: calls.append(options)
+        or SpeedtestCnResult(download_mbps=1, upload_mbps=1, ping_ms=1),
     )
 
     cli_mod.show_speedtest_cn_browser_automation()
@@ -348,7 +353,14 @@ def test_speedtest_cn_browser_cli_only_asks_continue_prompt(monkeypatch) -> None
     assert calls[0].headless is True
     assert calls[0].debug_screenshot is False
     assert prompts == ["是否继续？"]
-    assert "正在后台启动浏览器" in output
+    assert "正在执行 speedtest.cn 后台测速，请稍候" in output
+    assert "已打开 speedtest.cn" in output
+    assert "正在后台启动浏览器" not in output
+    assert "正在打开 speedtest.cn" not in output
+    assert "正在等待测速按钮" not in output
+    assert "正在开始测速" not in output
+    assert "正在等待结果，大约需要 20~90 秒" not in output
+    assert "正在解析结果" not in output
     assert "进入 debug 模式" not in "\n".join(prompts)
     assert "保存 debug screenshot" not in "\n".join(prompts)
     assert "使用可见浏览器调试" not in "\n".join(prompts)
@@ -386,7 +398,7 @@ def test_speedtest_cn_browser_cli_error_does_not_open_webbrowser(monkeypatch) ->
         lambda url: (_ for _ in ()).throw(AssertionError(f"unexpected webbrowser.open: {url}")),
     )
 
-    def fake_run(options):
+    def fake_run(options, progress_callback=None):
         calls.append(options)
         return SpeedtestCnResult(error="Playwright is not installed.")
 

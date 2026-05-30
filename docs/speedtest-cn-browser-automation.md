@@ -43,6 +43,7 @@ CLI 场景中直接面对网页广告和复杂页面。
 - 当前 CLI 入口固定 `headless=True` 后台运行，不打开可见浏览器窗口。
 - 当前 CLI 入口固定 `debug_screenshot=False`，不保存截图。
 - CLI 不暴露 debug / 可见浏览器 / screenshot 交互，也不显示 headless、screenshot、geolocation 等实现细节。
+- CLI 使用 event-driven progress：状态提示由 Playwright 实际执行节点通过 `progress_callback` 发出，而不是 CLI 预先打印固定步骤。
 - Browser context 使用桌面 Chrome UA、`1440x900` viewport、`zh-CN` locale、`Asia/Shanghai` timezone 和 `Accept-Language` 头，尽量贴近普通桌面浏览器。
 - Browser context 授予 `geolocation` 权限，并使用默认模拟位置（广州：`113.2644, 23.1291`）避免浏览器地理位置权限弹窗阻塞测速。
 - 不读取、不保存用户真实位置。
@@ -144,12 +145,18 @@ Parser 支持从页面文本里解析：
 
 运行时提示：
 
+- 正在执行 speedtest.cn 后台测速，请稍候...
 - 正在后台启动浏览器...
-- 正在打开 speedtest.cn...
-- 正在等待测速按钮...
-- 正在开始测速...
-- 正在等待结果，大约需要 20~90 秒...
-- 正在解析结果...
+- 已打开 speedtest.cn
+- 已处理页面提示
+- 已找到测速按钮
+- 已点击测速按钮，正在测速...
+- 已检测到 Ping 结果
+- 已检测到下载结果
+- 已检测到上传结果
+- 测速完成，正在生成结果...
+
+除第一句总提示外，其余状态来自浏览器自动化模块的真实事件回调。等待结果期间最多约每 2 秒读取一次 DOM 文本，但只在 Ping、下载、上传字段首次出现时输出状态，避免刷屏。由于网页结构可能变化，部分阶段状态可能缺失，最终以结果表格或错误提示为准。
 
 该入口只在高级功能中出现，不接入默认“带宽测速”主流程。
 
@@ -207,6 +214,8 @@ Parser 支持从页面文本里解析：
 - CLI 只询问是否继续。
 - CLI 固定传入 `headless=True` 和 `debug_screenshot=False`。
 - CLI 普通输出不泄露 debug、screenshot、geolocation 或 traceback。
+- Progress callback mock tests。
+- 等待循环字段首次出现时只输出一次状态。
 
 真实浏览器测试只作为手动实验，不放进默认 CI。所有公网测速、浏览器访问和
 外部页面行为都不能成为默认测试依赖。
