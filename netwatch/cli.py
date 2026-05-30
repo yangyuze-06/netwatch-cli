@@ -12,6 +12,7 @@ from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
 from netwatch.analysis import analyze_speedtest_consistency, build_network_path_summary, detect_vpn_tun, get_result_confidence
+from netwatch.device_location import DeviceLocationResult, run_browser_geolocation
 from netwatch.config import (
     clear_preferred_librespeed,
     clear_preferred_speedtest,
@@ -154,8 +155,24 @@ def show_network_info() -> None:
         exit_table.add_row("ISP/组织", exit_info.org or "-")
     console.print(exit_table)
     console.print("[dim]该位置来自公网 IP 粗略定位。若使用 VPN/TUN/代理，显示的是代理出口位置，不代表真实所在地。[/dim]")
+    console.print("[dim]公网出口位置来自 IP 数据库，城市可能不准确。[/dim]")
 
-    # 3. Ask about full interface details
+    # 3. Optional browser geolocation
+    try:
+        use_geolocation = Prompt.ask("是否使用浏览器授权定位进行更准确的位置检测？", choices=["y", "n"], default="n")
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已返回主菜单。[/yellow]")
+        return
+
+    if use_geolocation.lower() == "y":
+        console.print("[yellow]这是实验功能，会打开本地临时网页请求浏览器定位权限。[/yellow]")
+        console.print("[yellow]请在浏览器中手动点击允许。[/yellow]")
+        console.print("[yellow]netwatch-cli 不会保存或上传你的位置。[/yellow]")
+        with console.status("[bold green]等待浏览器定位...[/bold green]"):
+            geo_result = run_browser_geolocation()
+        print_device_location_result(geo_result)
+
+    # 4. Ask about full interface details
     try:
         show_all = Prompt.ask("是否查看全部网卡详情？", choices=["y", "n"], default="n")
     except KeyboardInterrupt:
@@ -535,6 +552,57 @@ def print_proxy_exit_judgment(result: SpeedtestResult) -> None:
 def compact_error(error: str) -> str:
     """Return the first line of an error message without traceback."""
     return error.strip().splitlines()[0] if error.strip() else "未知错误"
+
+
+def print_device_location_result(result: DeviceLocationResult) -> None:
+    """Print a browser geolocation result."""
+    if result.error:
+        console.print(f"[red]设备授权定位失败：{result.error}[/red]")
+        console.print("[yellow]可能原因：[/yellow]")
+        console.print("[yellow]- 用户拒绝浏览器定位权限[/yellow]")
+        console.print("[yellow]- 浏览器定位服务不可用[/yellow]")
+        console.print("[yellow]- 浏览器无法访问 localhost[/yellow]")
+        console.print("[yellow]- 超时[/yellow]")
+        return
+
+    table = Table(title="设备授权定位")
+    table.add_column("Field", style="bold cyan")
+    table.add_column("Value")
+    table.add_row("纬度", f"{result.latitude:.6f}" if result.latitude is not None else "-")
+    table.add_row("经度", f"{result.longitude:.6f}" if result.longitude is not None else "-")
+    table.add_row("精度", f"约 {result.accuracy_m:.0f} 米" if result.accuracy_m is not None else "-")
+    table.add_row("国家/地区", result.country or "-")
+
+    # China district center lookup takes priority for province/city/district
+    if result.china_province or result.china_city or result.china_district:
+        table.add_row("省份/区域", result.china_province or result.admin1 or "-")
+        table.add_row("城市", result.china_city or "未知")
+        table.add_row("区县", result.china_district or "未知")
+        table.add_row("附近地点", result.nearest_place or "-")
+    else:
+        table.add_row("省份/区域", result.admin1 or "-")
+        table.add_row("城市", result.admin2 or "未知")
+        table.add_row("区县", "未知")
+        table.add_row("附近地点", result.nearest_place or "-")
+
+    if result.reverse_geocoder_error:
+        if "not installed" in (result.reverse_geocoder_error or ""):
+            table.add_row("离线反向地理编码", "[dim]未启用[/dim]")
+            table.add_row("来源", result.source)
+            console.print(table)
+            console.print("[dim]离线反向地理编码返回最近地点匹配，不等于完整行政区划或精确地址。[/dim]")
+            console.print("[yellow]安装 reverse_geocoder 后可离线显示地点：[/yellow]")
+            console.print("[bold]pip install reverse_geocoder[/bold]")
+            return
+        table.add_row("离线反向地理编码", f"[yellow]错误: {result.reverse_geocoder_error}[/yellow]")
+        table.add_row("来源", result.source)
+        console.print(table)
+        console.print("[dim]离线反向地理编码返回最近地点匹配，不等于完整行政区划或精确地址。[/dim]")
+        return
+
+    table.add_row("来源", result.source)
+    console.print(table)
+    console.print("[dim]区县位置来自离线最近中心点匹配，不是真实行政边界。[/dim]")
 
 
 def show_keyword_speedtest() -> None:

@@ -1251,7 +1251,7 @@ def test_show_auto_speedtest_still_shows_detailed(monkeypatch) -> None:
 # --- Network info display tests ---
 
 
-def run_network_info_with_answers(monkeypatch, answer: str) -> str:
+def run_network_info_with_answers(monkeypatch, full_interfaces_answer: str) -> str:
     """Helper: run show_network_info with mocked exit info + prompt answer."""
     import io
     from rich.console import Console
@@ -1278,11 +1278,11 @@ def run_network_info_with_answers(monkeypatch, answer: str) -> str:
     )
 
     prompts = []
-    answer_iter = iter([answer])
+    answers = iter(["n", full_interfaces_answer])  # geolocation=n, full-interfaces=answer
 
     def fake_prompt(prompt, *args, **kwargs):
         prompts.append(prompt)
-        return next(answer_iter)
+        return next(answers)
 
     monkeypatch.setattr(cli_mod.Prompt, "ask", fake_prompt)
 

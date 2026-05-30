@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 browser = ["playwright>=1.40"]
+geo = ["reverse_geocoder"]
 
 [project.scripts]
 netwatch = "netwatch.cli:main"
