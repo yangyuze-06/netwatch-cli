@@ -41,7 +41,7 @@ from netwatch.router import (
 )
 from netwatch.speed import format_speed, sample_network_speed
 from netwatch.proxy_probe import probe_exit_ip
-from netwatch.speedtest_cn import SpeedtestCnResult
+from netwatch.speedtest_cn import SpeedtestCnResult, is_valid_speedtest_cn_label
 from netwatch.speedtest_cn_browser import BrowserAutomationOptions, run_speedtest_cn_browser_automation
 from netwatch.speedtest_runner import (
     SpeedtestResult,
@@ -767,8 +767,8 @@ def print_speedtest_cn_browser_result(result: SpeedtestCnResult) -> None:
     table.add_column("Upload", justify="right")
     table.add_row(
         result.source,
-        result.server_name or "-",
-        result.location or "-",
+        format_speedtest_cn_label(result.server_name),
+        format_speedtest_cn_label(result.location),
         format_optional_ms(result.ping_ms),
         format_optional_ms(result.jitter_ms),
         format_bandwidth(result.download_mbps, result.download_MBps),
@@ -778,6 +778,11 @@ def print_speedtest_cn_browser_result(result: SpeedtestCnResult) -> None:
     console.print("[dim]这是实验浏览器自动化结果，不是 speedtest.cn 官方 API 后端。[/dim]")
     if result.debug_screenshot_path:
         console.print(f"[dim]Debug screenshot: {result.debug_screenshot_path}[/dim]")
+
+
+def format_speedtest_cn_label(value: str | None) -> str:
+    """Format optional speedtest.cn metadata labels without leaking UI noise."""
+    return value if is_valid_speedtest_cn_label(value) else "-"
 
 
 def build_librespeed_menu() -> Panel:

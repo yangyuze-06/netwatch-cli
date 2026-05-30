@@ -48,6 +48,34 @@ SERVER_ALIASES = ("测速点", "测试点", "服务器", "server")
 LOCATION_ALIASES = ("位置", "地区", "运营商", "isp", "location")
 ALL_METRIC_ALIASES = DOWNLOAD_ALIASES + UPLOAD_ALIASES + PING_ALIASES + JITTER_ALIASES
 NUMBER_RE = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])")
+INVALID_METADATA_VALUES = {
+    "",
+    ">",
+    ">>",
+    "取消",
+    "确定",
+    "关闭",
+    "继续测速",
+    "不再提醒",
+    "开始测速",
+    "测速",
+    "允许",
+    "仅这次访问时允许",
+    "访问该网站时允许",
+    "一律不允许",
+}
+METADATA_KEYWORDS = (
+    "_vixtel",
+    "移动",
+    "联通",
+    "电信",
+    "mobile",
+    "telecom",
+    "unicom",
+    "guangzhou",
+    "guangdong",
+    "china",
+)
 
 
 def parse_speedtest_cn_text(text: str) -> SpeedtestCnResult:
@@ -69,6 +97,8 @@ def parse_speedtest_cn_text(text: str) -> SpeedtestCnResult:
         fallback_server, fallback_location = parse_unlabeled_server_location(lines, [download, upload, ping, jitter])
         server_name = server_name or fallback_server
         location = location or fallback_location
+    server_name = server_name if is_valid_speedtest_cn_label(server_name) else None
+    location = location if is_valid_speedtest_cn_label(location) else None
 
     result = SpeedtestCnResult(
         download_mbps=download.value,
@@ -166,6 +196,8 @@ def parse_labeled_value(lines: list[str], aliases: tuple[str, ...]) -> str | Non
         alias = first_alias_in_line(line, aliases)
         if not alias:
             continue
+        if not is_metadata_label_context(line, alias):
+            continue
         same_line = cleanup_labeled_value(line, alias)
         if same_line:
             return same_line
@@ -181,9 +213,17 @@ def cleanup_labeled_value(line: str, alias: str) -> str | None:
     if position < 0:
         return None
     value = line[position + len(alias) :].strip(" :：-/|")
-    if not value or looks_like_number_only(value) or contains_alias(value, ALL_METRIC_ALIASES):
+    if not is_valid_speedtest_cn_label(value) or looks_like_number_only(value) or contains_alias(value, ALL_METRIC_ALIASES):
         return None
     return value
+
+
+def is_metadata_label_context(line: str, alias: str) -> bool:
+    """Return True when an alias is being used as a metadata label, not inside UI text."""
+    position = line.lower().find(alias.lower())
+    if position == 0:
+        return True
+    return alias in SERVER_ALIASES and "更换测速点" in line
 
 
 def next_non_metric_text(lines: list[str], start_index: int) -> str | None:
@@ -211,15 +251,37 @@ def parse_unlabeled_server_location(
 
 def is_candidate_text_value(line: str) -> bool:
     """Return True for likely server/location text lines."""
-    if not line or looks_like_number_only(line):
+    if not is_valid_speedtest_cn_label(line) or looks_like_number_only(line):
         return False
     if contains_alias(line, ALL_METRIC_ALIASES):
         return False
     if contains_alias(line, SERVER_ALIASES + LOCATION_ALIASES):
         return False
     lowered = line.lower()
-    noisy_fragments = ("cookie", "privacy", "广告", "验证码", "登录", "注册", "下载app", "app")
-    return not any(fragment in lowered for fragment in noisy_fragments)
+    noisy_fragments = ("cookie", "privacy", "广告", "验证码", "登录", "注册", "下载app", "app", "权限", "位置信息")
+    if any(fragment in lowered for fragment in noisy_fragments):
+        return False
+    return has_metadata_keyword(line)
+
+
+def is_valid_speedtest_cn_label(value: str | None) -> bool:
+    """Return False for UI controls, symbols, and other metadata noise."""
+    if value is None:
+        return False
+    normalized = value.strip()
+    if normalized in INVALID_METADATA_VALUES:
+        return False
+    if looks_like_number_only(normalized):
+        return False
+    if re.fullmatch(r"[\W_]+", normalized, flags=re.UNICODE):
+        return False
+    return True
+
+
+def has_metadata_keyword(value: str) -> bool:
+    """Return True for text that looks like a server, carrier, or location label."""
+    lowered = value.lower()
+    return any(keyword in lowered for keyword in METADATA_KEYWORDS)
 
 
 def looks_like_number_only(line: str) -> bool:

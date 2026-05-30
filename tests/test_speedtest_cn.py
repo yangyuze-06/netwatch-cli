@@ -2,7 +2,7 @@ import io
 
 from rich.console import Console
 
-from netwatch.speedtest_cn import SpeedtestCnResult, parse_speedtest_cn_text
+from netwatch.speedtest_cn import SpeedtestCnResult, is_valid_speedtest_cn_label, parse_speedtest_cn_text
 
 
 def test_parse_speedtest_cn_multiline_chinese_text() -> None:
@@ -70,6 +70,125 @@ Location Guangzhou
     assert result.jitter_ms == 0.89
     assert result.server_name == "Guangdong Mobile_Vixtel_1"
     assert result.location == "Guangzhou"
+
+
+def test_parse_speedtest_cn_filters_ui_noise_from_metadata() -> None:
+    text = """
+为检测真实网络状况，建议：
+不再提醒
+继续测速
+允许此网站使用您的位置信息？
+访问该网站时允许
+仅这次访问时允许
+一律不允许
+>>
+取消
+下载/Mbps
+616.10
+上传/Mbps
+68.59
+时延/ms
+6
+抖动/ms
+1.89
+更换测速点 >>
+广东移动_Vixtel_1
+广州移动
+"""
+
+    result = parse_speedtest_cn_text(text)
+
+    assert result.error is None
+    assert result.download_mbps == 616.10
+    assert result.upload_mbps == 68.59
+    assert result.ping_ms == 6
+    assert result.jitter_ms == 1.89
+    assert result.server_name == "广东移动_Vixtel_1"
+    assert result.location == "广州移动"
+    assert result.server_name not in {">>", "取消"}
+    assert result.location not in {">>", "取消"}
+
+
+def test_parse_speedtest_cn_core_metrics_without_metadata_still_succeeds() -> None:
+    text = """
+下载/Mbps
+616.10
+上传/Mbps
+68.59
+时延/ms
+6
+抖动/ms
+1.89
+"""
+
+    result = parse_speedtest_cn_text(text)
+
+    assert result.error is None
+    assert result.download_mbps == 616.10
+    assert result.upload_mbps == 68.59
+    assert result.ping_ms == 6
+    assert result.server_name is None
+    assert result.location is None
+
+
+def test_parse_speedtest_cn_ui_noise_only_does_not_pollute_metadata() -> None:
+    text = """
+下载/Mbps
+616.10
+上传/Mbps
+68.59
+时延/ms
+6
+抖动/ms
+1.89
+>>
+取消
+继续测速
+不再提醒
+访问该网站时允许
+"""
+
+    result = parse_speedtest_cn_text(text)
+
+    assert result.error is None
+    assert result.server_name is None
+    assert result.location is None
+
+
+def test_speedtest_cn_label_validator_rejects_ui_noise() -> None:
+    invalid_values = [
+        ">>",
+        ">",
+        "取消",
+        "确定",
+        "关闭",
+        "继续测速",
+        "不再提醒",
+        "开始测速",
+        "测速",
+        "允许",
+        "仅这次访问时允许",
+        "访问该网站时允许",
+        "一律不允许",
+        "",
+        "12345",
+        "////",
+    ]
+
+    for value in invalid_values:
+        assert not is_valid_speedtest_cn_label(value)
+
+    assert is_valid_speedtest_cn_label("广东移动_Vixtel_1")
+    assert is_valid_speedtest_cn_label("Guangzhou")
+
+
+def test_speedtest_cn_cli_label_fallback_filters_ui_noise() -> None:
+    from netwatch.cli import format_speedtest_cn_label
+
+    assert format_speedtest_cn_label(">>") == "-"
+    assert format_speedtest_cn_label("取消") == "-"
+    assert format_speedtest_cn_label(None) == "-"
+    assert format_speedtest_cn_label("广东移动_Vixtel_1") == "广东移动_Vixtel_1"
 
 
 def test_parse_speedtest_cn_missing_required_fields_returns_error() -> None:
