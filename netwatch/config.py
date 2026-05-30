@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from netwatch.speedtest_backends.models import SpeedtestResult
+from netwatch.speedtest.backends.models import SpeedtestResult
 
 CONFIG_ENV_VAR = "NETWATCH_CONFIG_PATH"
 DEFAULT_CONFIG_DIR = ".netwatch"

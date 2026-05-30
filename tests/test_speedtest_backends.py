@@ -1,10 +1,10 @@
 import subprocess
 
-from netwatch.speedtest_backends.models import SpeedtestResult
-from netwatch.speedtest_backends import librespeed_cli, ookla_cli
-from netwatch.speedtest_backends.ookla_cli import parse_ookla_result
-from netwatch.speedtest_backends.python_speedtest import result_from_bits
-from netwatch import speedtest_runner
+from netwatch.speedtest.backends.models import SpeedtestResult
+from netwatch.speedtest.backends import librespeed_cli, ookla_cli
+from netwatch.speedtest.backends.ookla_cli import parse_ookla_result
+from netwatch.speedtest.backends.python_speedtest import result_from_bits
+from netwatch.speedtest import runner as speedtest_runner
 from netwatch.network_info import InterfaceInfo
 from netwatch import network_info
 
@@ -1142,7 +1142,7 @@ def test_proxy_speedtest_vpn_tun_judgment(monkeypatch) -> None:
     from rich.console import Console
     from netwatch import cli as cli_mod
     from netwatch.proxy_probe import ExitIPInfo
-    from netwatch.speedtest_runner import SpeedtestResult
+    from netwatch.speedtest.runner import SpeedtestResult
 
     test_result = SpeedtestResult(
         backend="official-ookla-cli",
@@ -1178,7 +1178,7 @@ def test_proxy_speedtest_no_vpn_tun_judgment(monkeypatch) -> None:
     from rich.console import Console
     from netwatch import cli as cli_mod
     from netwatch.proxy_probe import ExitIPInfo
-    from netwatch.speedtest_runner import SpeedtestResult
+    from netwatch.speedtest.runner import SpeedtestResult
 
     test_result = SpeedtestResult(
         backend="official-ookla-cli",

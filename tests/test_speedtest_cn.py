@@ -2,7 +2,7 @@ import io
 
 from rich.console import Console
 
-from netwatch.speedtest_cn import SpeedtestCnResult, is_valid_speedtest_cn_label, parse_speedtest_cn_text
+from netwatch.speedtest.speedtest_cn import SpeedtestCnResult, is_valid_speedtest_cn_label, parse_speedtest_cn_text
 
 
 def test_parse_speedtest_cn_multiline_chinese_text() -> None:
@@ -494,7 +494,7 @@ def test_show_speedtest_cn_main_cancel_does_not_run(monkeypatch) -> None:
 
 def test_show_speedtest_cn_main_prints_simplified_result(monkeypatch) -> None:
     """Main menu speedtest.cn success output must use simplified table without advanced diagnostics."""
-    from netwatch.speedtest_cn import SpeedtestCnResult
+    from netwatch.speedtest.speedtest_cn import SpeedtestCnResult
 
     result = SpeedtestCnResult(
         download_mbps=717.68,

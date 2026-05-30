@@ -10,7 +10,7 @@ from netwatch.config import (
     save_preferred_speedtest,
     set_preferred_librespeed,
 )
-from netwatch.speedtest_backends.models import SpeedtestResult
+from netwatch.speedtest.backends.models import SpeedtestResult
 
 
 def test_config_read_write(tmp_path: Path) -> None:

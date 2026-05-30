@@ -28,7 +28,7 @@ from netwatch.router import (
     router_devices_to_network_devices,
     scan_results_to_network_devices,
 )
-from netwatch.speed import format_speed, sample_network_speed
+from netwatch.speedtest.speed import format_speed, sample_network_speed
 from netwatch.cli_modules.lan import (
     build_lan_discovery_menu,
     choose_lan_scan_candidate,

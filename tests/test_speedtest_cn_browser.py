@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from netwatch import speedtest_cn_browser as browser_mod
-from netwatch.speedtest_cn_browser import BrowserAutomationOptions
+from netwatch.speedtest import speedtest_cn_browser as browser_mod
+from netwatch.speedtest.speedtest_cn_browser import BrowserAutomationOptions
 
 
 class FakeTimeoutError(Exception):

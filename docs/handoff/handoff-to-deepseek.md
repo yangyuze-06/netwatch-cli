@@ -95,10 +95,10 @@
 ## 6. 关键文件
 
 - `netwatch/cli.py`：菜单和交互。
-- `netwatch/speedtest_cn.py`：`speedtest.cn` parser。
-- `netwatch/speedtest_cn_browser.py`：Playwright 自动化。
-- `netwatch/speedtest_runner.py`：通用测速调度。
-- `netwatch/speedtest_backends/librespeed_cli.py`：LibreSpeed 后端。
+- `netwatch/speedtest/speedtest_cn.py`：`speedtest.cn` parser。
+- `netwatch/speedtest/speedtest_cn_browser.py`：Playwright 自动化。
+- `netwatch/speedtest/runner.py`：通用测速调度。
+- `netwatch/speedtest/backends/librespeed_cli.py`：LibreSpeed 后端。
 - `netwatch/router.py`：路由器相关。
 - `tests/`：全部 mock 测试。
 

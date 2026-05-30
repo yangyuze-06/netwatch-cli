@@ -120,10 +120,12 @@ netwatch/                         核心代码
   location/                       定位与离线行政区划
     china_admin_lookup.py
     data/                         轻量内置数据
-  speedtest_backends/             Ookla / LibreSpeed / Python 测速后端
-  speedtest_runner.py             测速调度与诊断
-  speedtest_cn*.py                speedtest.cn browser automation
-  analysis.py                     测速结果一致性和路径分析
+  speedtest/                      测速领域模块
+    analysis.py                   测速结果一致性和路径分析
+    runner.py                     测速调度与诊断
+    speed.py                      实时网卡流量采样
+    speedtest_cn*.py              speedtest.cn browser automation
+    backends/                     Ookla / LibreSpeed / Python 测速后端
 scripts/                          构建与维护脚本
 tests/                            单元测试和 mock 测试
 docs/
@@ -132,7 +134,7 @@ docs/
   features/                       专项功能设计文档
 ```
 
-这次项目仍保持当前包布局，不迁移到 `src/`。`speedtest_runner.py`、`speedtest_cn.py`、`speedtest_cn_browser.py` 和 `speed.py` 暂不移动，后续可在测试覆盖稳定时再拆到 `netwatch/speedtest/`。
+这次项目仍保持当前包布局，不迁移到 `src/`。测速相关业务模块已收敛到 `netwatch/speedtest/`，旧路径保留轻量兼容 wrapper。
 
 ## 数据与许可证
 

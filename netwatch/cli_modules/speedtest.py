@@ -9,7 +9,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from netwatch.analysis import (
+from netwatch.speedtest.analysis import (
     analyze_speedtest_consistency,
     build_network_path_summary,
     detect_vpn_tun,
@@ -26,12 +26,12 @@ from netwatch.config import (
 )
 from netwatch.network_info import get_preferred_physical_interface as _default_get_preferred_physical_interface
 from netwatch.proxy_probe import probe_exit_ip as _default_probe_exit_ip
-from netwatch.speedtest_cn import SpeedtestCnResult, is_valid_speedtest_cn_label
-from netwatch.speedtest_cn_browser import (
+from netwatch.speedtest.speedtest_cn import SpeedtestCnResult, is_valid_speedtest_cn_label
+from netwatch.speedtest.speedtest_cn_browser import (
     BrowserAutomationOptions,
     run_speedtest_cn_browser_automation as _default_run_speedtest_cn_browser_automation,
 )
-from netwatch.speedtest_runner import (
+from netwatch.speedtest.runner import (
     SpeedtestResult,
     build_isp_preset_keywords,
     filter_servers_by_keyword,

@@ -48,11 +48,11 @@
 - `netwatch/router.py`：默认网关、打开路由器后台、小米 LuCI API、设备合并
 - `netwatch/proxy_probe.py`：当前公网出口 IP 检测
 - `netwatch/config.py`：非敏感用户配置，例如常用 speedtest server id
-- `netwatch/speedtest_runner.py`：测速后端调度、fallback、服务器筛选、质量诊断
-- `netwatch/speedtest_backends/ookla_cli.py`：官方 Ookla CLI 后端
-- `netwatch/speedtest_backends/python_speedtest.py`：Python speedtest-cli fallback
-- `netwatch/speedtest_backends/librespeed_cli.py`：LibreSpeed CLI 后端
-- `netwatch/speedtest_backends/models.py`：`SpeedtestResult` 数据结构
+- `netwatch/speedtest/runner.py`：测速后端调度、fallback、服务器筛选、质量诊断
+- `netwatch/speedtest/backends/ookla_cli.py`：官方 Ookla CLI 后端
+- `netwatch/speedtest/backends/python_speedtest.py`：Python speedtest-cli fallback
+- `netwatch/speedtest/backends/librespeed_cli.py`：LibreSpeed CLI 后端
+- `netwatch/speedtest/backends/models.py`：`SpeedtestResult` 数据结构
 - `tests/`：pytest 测试
 - `docs/`：版本计划和交接文档
 

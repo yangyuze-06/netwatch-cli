@@ -1,4 +1,4 @@
-from netwatch.analysis import (
+from netwatch.speedtest.analysis import (
     CONFIDENCE_HIGH,
     CONFIDENCE_LOW,
     CONFIDENCE_MEDIUM,
@@ -7,7 +7,7 @@ from netwatch.analysis import (
     detect_vpn_tun,
     get_result_confidence,
 )
-from netwatch.speedtest_backends.models import SpeedtestResult
+from netwatch.speedtest.backends.models import SpeedtestResult
 
 
 def test_high_packet_loss_with_high_throughput_warns_metric_conflict() -> None:

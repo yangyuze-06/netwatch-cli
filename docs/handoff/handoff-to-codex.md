@@ -50,9 +50,9 @@
 
 ## 3. 当前测速模块定位
 
-- **Official Ookla CLI**：默认通用测速后端（`netwatch/speedtest_backends/ookla_cli.py`）。使用绝对路径 `/opt/homebrew/bin/speedtest`，已验证可区分 `.venv/bin/speedtest` 的 Python shadow。
-- **Python speedtest-cli**：仅作为 fallback（`netwatch/speedtest_backends/python_speedtest.py`），结果可能偏低，已标注提示。
-- **LibreSpeed CLI**：开源备选后端（`netwatch/speedtest_backends/librespeed_cli.py`），V0.9 支持 `--server-json <url>` / `--local-json <file>` 自定义服务器列表，可保存常用配置。公共节点质量不保证，自建节点最可靠。
+- **Official Ookla CLI**：默认通用测速后端（`netwatch/speedtest/backends/ookla_cli.py`）。使用绝对路径 `/opt/homebrew/bin/speedtest`，已验证可区分 `.venv/bin/speedtest` 的 Python shadow。
+- **Python speedtest-cli**：仅作为 fallback（`netwatch/speedtest/backends/python_speedtest.py`），结果可能偏低，已标注提示。
+- **LibreSpeed CLI**：开源备选后端（`netwatch/speedtest/backends/librespeed_cli.py`），V0.9 支持 `--server-json <url>` / `--local-json <file>` 自定义服务器列表，可保存常用配置。公共节点质量不保证，自建节点最可靠。
 - **speedtest.cn 网页对照**：只是打开网页，**不是 CLI 后端**。不使用、不调用、不抓包、不逆向 speedtest.cn 私有 API。未来如有 speedtest.cn 官方 SDK/API 授权，可作为独立后端接入。
 - **speedtest.cn browser automation**（主菜单 4）：V0.10.4 已提升为主菜单“宽带测速”默认入口。使用 Playwright 后台打开 `speedtest.cn`、点击测速并读取 DOM 文本，为普通用户输出简洁表格（不含 Result confidence、网络路径分析、VPN/TUN）。不抓包、不调用私有 API、不绕过验证码/风控。仍为实验性质（依赖页面结构），不是官方 API 后端。失败时不自动 fallback 到 Ookla。
 - **通用测速诊断**（高级功能第 1 项）：原来的 `run_best_speedtest()` 多后端 fallback，Ookla / LibreSpeed / Python fallback 按优先级依次尝试，保留完整诊断信息（Result confidence、网络路径分析、VPN/TUN 检测、质量诊断建议等）。
@@ -72,19 +72,19 @@
 | 文件 | 职责 |
 |------|------|
 | `netwatch/cli.py` | 主菜单、高级菜单、展示逻辑 |
-| `netwatch/speedtest_runner.py` | 测速调度、fallback、质量诊断、server keyword filter、ISP 预设关键词、最近一次测速结果缓存 |
+| `netwatch/speedtest/runner.py` | 测速调度、fallback、质量诊断、server keyword filter、ISP 预设关键词、最近一次测速结果缓存 |
 | `netwatch/config.py` | `~/.netwatch/config.json` 配置读写，仅保存非敏感信息（Ookla server id/name/location/interface、LibreSpeed URL/path/duration） |
 | `netwatch/network_info.py` | 网卡识别、物理接口选择、TUN/utun/198.18.0.0/15 过滤 |
 | `netwatch/proxy_probe.py` | 当前 CLI 公网出口 IP 检测（ipinfo.io） |
 | `netwatch/router.py` | 默认网关、通用路由器后台 URL、小米/Redmi stok API、设备合并 |
 | `netwatch/scanner.py` | 局域网扫描、ARP/MAC/hostname |
-| `netwatch/speed.py` | 实时网卡流量采样 |
-| `netwatch/speedtest_backends/models.py` | `SpeedtestResult` 数据结构 |
-| `netwatch/speedtest_backends/ookla_cli.py` | 官方 Ookla CLI 后端 |
-| `netwatch/speedtest_backends/python_speedtest.py` | Python speedtest-cli fallback |
-| `netwatch/speedtest_backends/librespeed_cli.py` | LibreSpeed CLI 后端，支持自定义 server-json/local-json |
-| `netwatch/speedtest_cn.py` | speedtest.cn browser automation 结果结构和 DOM 文本 parser |
-| `netwatch/speedtest_cn_browser.py` | Playwright 实验模块，延迟 import，可选 screenshot debug |
+| `netwatch/speedtest/speed.py` | 实时网卡流量采样 |
+| `netwatch/speedtest/backends/models.py` | `SpeedtestResult` 数据结构 |
+| `netwatch/speedtest/backends/ookla_cli.py` | 官方 Ookla CLI 后端 |
+| `netwatch/speedtest/backends/python_speedtest.py` | Python speedtest-cli fallback |
+| `netwatch/speedtest/backends/librespeed_cli.py` | LibreSpeed CLI 后端，支持自定义 server-json/local-json |
+| `netwatch/speedtest/speedtest_cn.py` | speedtest.cn browser automation 结果结构和 DOM 文本 parser |
+| `netwatch/speedtest/speedtest_cn_browser.py` | Playwright 实验模块，延迟 import，可选 screenshot debug |
 | `tests/test_speedtest_backends.py` | 测速相关测试（含后端、LibreSpeed custom list、质量诊断、ISP 预设、网页对照） |
 | `tests/test_speedtest_cn.py` | speedtest.cn parser 和 CLI 实验入口 mock tests |
 | `tests/test_speedtest_cn_browser.py` | Playwright missing dependency、mock browser、timeout、Ctrl+C、screenshot path tests |
