@@ -22,6 +22,7 @@
 - Python 3.10+
 - macOS 或 Linux 终端环境
 - Git
+- `reverse-geocoder` Python 包，用于浏览器授权定位后的离线反向地理编码
 - 可选：Playwright Chromium，用于 `speedtest.cn` 浏览器自动化测速
 - 可选：官方 Ookla CLI 二进制 `speedtest`，用于 Ookla 后端
 - 可选：LibreSpeed CLI 二进制，用于 LibreSpeed 后端

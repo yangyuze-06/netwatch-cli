@@ -13,11 +13,12 @@ dependencies = [
     "requests>=2.31",
     "rich>=13.0",
     "speedtest-cli>=2.1",
+    "reverse-geocoder>=1.5.1",
 ]
 
 [project.optional-dependencies]
 browser = ["playwright>=1.40"]
-geo = ["reverse_geocoder"]
+geo = ["reverse-geocoder>=1.5.1"]
 
 [project.scripts]
 netwatch = "netwatch.cli:main"

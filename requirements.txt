@@ -4,6 +4,11 @@ rich>=13.7.0
 # HTTP requests / API calls / download helpers
 requests>=2.31.0
 
+# Browser geolocation reverse geocoding
+# pip package: reverse-geocoder
+# import name: reverse_geocoder
+reverse-geocoder>=1.5.1
+
 # Python fallback speedtest backend
 # This is NOT the official Ookla Speedtest CLI binary.
 speedtest-cli>=2.1.3

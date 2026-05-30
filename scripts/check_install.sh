@@ -37,6 +37,7 @@ echo "==> Checking Python dependencies..."
 import rich
 import requests
 import speedtest
+import reverse_geocoder
 from playwright.sync_api import sync_playwright
 
 print("✔ Python dependencies OK")
