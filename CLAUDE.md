@@ -1,47 +1,47 @@
 # CLAUDE.md
 
-你正在接手 `netwatch-cli`。
+You are taking over `netwatch-cli`.
 
-请先阅读：
+Please read these first:
 
 1. `README.md`
-2. `docs/handoff/handoff-to-codex.md`（最新交接文档）
+2. `docs/handoff/handoff-to-codex.md` (latest handoff document)
 3. `docs/handoff/handoff-to-claude.md`
 4. `docs/plans/v0.8.2-plan.md`
 5. `docs/plans/v0.8.3-plan.md`
 
-本轮 Claude Code 已完成：
+This Claude Code round completed:
 
-- 删除 speedtest.cn 手动录入功能和 manual parser。
-- 高级功能菜单重排为 11 项。
-- ISP 预设关键词优化（Hong Kong 降级为最后 fallback）。
-- 测速质量诊断增强（按触发条件给出针对性建议）。
-- README、handoff-to-claude.md、AGENTS.md 已更新相关边界。
+- Removed the manual `speedtest.cn` entry feature and manual parser.
+- Reordered the advanced feature menu into 11 items.
+- Improved ISP preset keywords, with Hong Kong downgraded to the final fallback.
+- Enhanced speedtest quality diagnostics with targeted advice by trigger condition.
+- Updated README, `handoff-to-claude.md`, and `AGENTS.md` with the relevant boundaries.
 
-后续切回 Codex 时，Codex 应先读 `docs/handoff/handoff-to-codex.md`。
+When switching back to Codex, Codex should read `docs/handoff/handoff-to-codex.md` first.
 
-后续由 DeepSeek 接手时，请先读 `docs/handoff/handoff-to-deepseek.md`。
+When handing off to DeepSeek, read `docs/handoff/handoff-to-deepseek.md` first.
 
-当前项目重点：
+Current project focus:
 
-- 这是一个 Python CLI 网络诊断工具。
-- 用户当前最关心的是带宽测速准确性。
-- 官方 Ookla CLI 已接入，但当前环境下 Ookla 自动选服经常选到 Tokyo/Hong Kong，导致结果远低于 `speedtest.cn` 网页。
-- 不要把这个误判为用户网络差。
-- `speedtest.cn` 网页曾能选到“广东移动_Vixtel_1”，接近千兆。
-- 当前策略应是：质量诊断、保存常用 server id、网页对照入口，而不是逆向 `speedtest.cn` 私有 API。
+- This is a Python CLI network diagnostics tool.
+- The user currently cares most about bandwidth test accuracy.
+- The official Ookla CLI has been integrated, but in the current environment Ookla automatic server selection often chooses Tokyo/Hong Kong, which produces results far below the `speedtest.cn` web test.
+- Do not misdiagnose this as poor user network quality.
+- The `speedtest.cn` website was previously able to select a Guangdong Mobile Vixtel node and reach near-gigabit results.
+- The current strategy should be quality diagnostics, saving frequently used server IDs, and a browser reference entry point, not reverse engineering private `speedtest.cn` APIs.
 
-操作要求：
+Operational requirements:
 
-- 每次修改前先看 `git status`。
-- 每次只做一个明确任务。
-- 修改后运行：
+- Check `git status` before each change.
+- Do only one clearly defined task at a time.
+- After changes, run:
   ```bash
   python -m compileall netwatch
   pytest -q
   python -m pytest -q
   ```
-- 不要真实跑公网测速作为自动测试。
-- 需要真实测速时先征求用户确认。
-- 不保存敏感信息。
-- 不逆向 `speedtest.cn` 私有 API。
+- Do not run real public speedtests as automated tests.
+- Ask the user for confirmation before any real speedtest.
+- Do not store sensitive information.
+- Do not reverse engineer private `speedtest.cn` APIs.

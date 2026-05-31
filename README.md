@@ -27,7 +27,7 @@
 - 可选：官方 Ookla CLI 二进制 `speedtest`，用于 Ookla 后端
 - 可选：LibreSpeed CLI 二进制，用于 LibreSpeed 后端
 
-### 安装
+### 安装（macOS / Linux）
 
 ```bash
 git clone https://github.com/yangyuze-06/netwatch-cli.git
@@ -35,16 +35,10 @@ cd netwatch-cli
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
 python -m pip install -e .
+python -m pip install -e ".[browser]"
 python -m playwright install chromium
 netwatch
-```
-
-如果只想做最小安装，可以跳过 `requirements.txt` 和 Playwright Chromium：
-
-```bash
-python -m pip install -e .
 ```
 
 再次运行：
@@ -61,16 +55,35 @@ netwatch
 python -m netwatch.cli
 ```
 
-Windows PowerShell experimental：
+项目 Python 主依赖以 `pyproject.toml` 为准；
+
+### Windows PowerShell
+
+先安装 Python 3.10+，安装时勾选 **Add python.exe to PATH**。打开新的 PowerShell 后检查：
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e .
-netwatch
+python --version
 ```
 
-如果 PowerShell 无法激活虚拟环境，可先运行：
+如果 `py` 不存在，用 `python` 即可；如果 `python --version` 没有输出或提示找不到命令，说明 Python 或 PATH 尚未配置好。
+
+### 一键运行
+
+```powershell
+git clone https://github.com/yangyuze-06/netwatch-cli.git
+cd netwatch-cli
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
+python -m pip install -e ".[browser]"
+python -m playwright install chromium
+python -m compileall netwatch
+python -m pytest -q
+python -m netwatch.cli
+```
+
+Windows PowerShell 不使用 `source .venv/bin/activate`。如果 PowerShell 无法激活虚拟环境，可先运行：
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
@@ -216,18 +229,3 @@ netwatch-cli/
 - AreaCity-JsSpider-StatsGov 使用 MIT license。
 - 本项目当前未包含独立 `LICENSE` 文件，项目许可证待补充。
 - 不要把 `ok_geo.csv` 或 `ok_geo.csv.7z` 放入仓库；运行时只需要轻量 CSV。
-
-## 文档
-
-- [Docs index](docs/README.md)
-- [Codex handoff](docs/handoff/handoff-to-codex.md)
-- [Claude handoff](docs/handoff/handoff-to-claude.md)
-- [DeepSeek handoff](docs/handoff/handoff-to-deepseek.md)
-- [speedtest.cn browser automation](docs/features/speedtest-cn-browser-automation.md)
-
-## Roadmap
-
-- 可选 polygon/GeoJSON 精确边界数据包。
-- 更好的多平台测速后端。
-- 更稳定的路由器设备识别。
-- 更清晰的 provider 插件体系。

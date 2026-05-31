@@ -17,7 +17,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-browser = ["playwright>=1.40"]
+browser = ["playwright>=1.44"]
+dev = ["pytest>=8.0"]
+all = ["playwright>=1.44", "pytest>=8.0"]
 geo = ["reverse-geocoder>=1.5.1"]
 
 [project.scripts]

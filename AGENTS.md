@@ -1,20 +1,20 @@
 # AGENTS.md
 
-## 项目定位
+## Project Scope
 
-`netwatch-cli` 是一个 Python CLI 网络诊断工具，目标是轻量、可维护、跨平台。
+`netwatch-cli` is a Python CLI network diagnostics tool. The goal is to keep it lightweight, maintainable, and cross-platform.
 
-## 开发原则
+## Development Principles
 
-- 小步提交，不要一次性大重构。
-- CLI 层只做交互展示。
-- 网络测速后端必须返回结构化结果，不直接 print。
-- 所有公网测速、curl、subprocess、requests 测试都必须 mock。
-- 不保存密码、stok、token、公网 IP 等敏感信息。
-- 不逆向 `speedtest.cn` 私有 API。
-- `speedtest.cn` 只作为网页对照入口，除非未来有正式 SDK/API 授权。
+- Make small commits; do not perform large rewrites in one step.
+- The CLI layer should only handle interaction and presentation.
+- Network speedtest backends must return structured results and must not print directly.
+- All public speedtest, `curl`, `subprocess`, and `requests` tests must be mocked.
+- Do not store sensitive information such as passwords, `stok`, tokens, or public IP addresses.
+- Do not reverse engineer private `speedtest.cn` APIs.
+- Treat `speedtest.cn` only as a browser reference entry point unless an officially authorized SDK/API becomes available in the future.
 
-## 常用命令
+## Common Commands
 
 ```bash
 source .venv/bin/activate
@@ -25,15 +25,15 @@ python -m pytest -q
 git diff --check
 ```
 
-## 当前重点
+## Current Focus
 
-- 主菜单 4 使用 `speedtest.cn` browser automation 作为默认带宽测速入口。
-- 主菜单 5 "代理/当前出口测速"默认简洁输出，完成后询问是否查看详细诊断；高级功能第 1 项继续完整诊断。
-- 保持高级功能第 1 项"通用测速诊断"的 Ookla / LibreSpeed / Python fallback 可用。
-- `speedtest.cn` browser automation 失败时不自动 fallback 到 Ookla。
-- 不逆向 speedtest.cn 私有 API。
+- Main menu item 4 uses `speedtest.cn` browser automation as the default bandwidth test entry point.
+- Main menu item 5, "Proxy / Current Exit Speedtest", should use concise output by default and ask whether to show detailed diagnostics after completion; advanced menu item 1 should continue to show full diagnostics.
+- Keep advanced menu item 1, "General Speedtest Diagnostics", working with Ookla / LibreSpeed / Python fallback.
+- Do not automatically fall back to Ookla when `speedtest.cn` browser automation fails.
+- Do not reverse engineer private `speedtest.cn` APIs.
 
-## 接手前必读
+## Required Reading Before Handoff
 
 - `README.md`
 - `AGENTS.md`
@@ -41,15 +41,15 @@ git diff --check
 - `docs/handoff/handoff-to-deepseek.md`
 - `docs/features/speedtest-cn-browser-automation.md`
 
-后续由 DeepSeek 接手，详见 `docs/handoff/handoff-to-deepseek.md`。
+Future DeepSeek handoff details are in `docs/handoff/handoff-to-deepseek.md`.
 
-## 当前禁止
+## Current Prohibitions
 
-- 不要重新加入 speedtest.cn 手动录入/粘贴结果功能（已删除）。
-- 不要逆向 speedtest.cn 私有 API。
-- 不要把 speedtest.cn browser automation 当成官方 API 后端。
-- 不要让默认测试真实访问 speedtest.cn 或真实启动浏览器，必须 mock。
-- 不要提交 `~/.netwatch/debug/` screenshot。
-- 不要大重构。
-- 不要修改 `run_best_speedtest()` / `show_auto_speedtest()` 的后端实现逻辑。
-- 不要让主菜单 4 在 speedtest.cn 失败时自动 fallback 到 Ookla。
+- Do not reintroduce manual `speedtest.cn` result entry/paste functionality; it has been removed.
+- Do not reverse engineer private `speedtest.cn` APIs.
+- Do not treat `speedtest.cn` browser automation as an official API backend.
+- Do not let default tests access the real `speedtest.cn` website or launch a real browser; tests must mock this behavior.
+- Do not commit screenshots from `~/.netwatch/debug/`.
+- Do not perform large rewrites.
+- Do not modify the backend implementation logic of `run_best_speedtest()` / `show_auto_speedtest()`.
+- Do not let main menu item 4 automatically fall back to Ookla when `speedtest.cn` fails.

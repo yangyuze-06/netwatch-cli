@@ -24,7 +24,6 @@ if [ ! -x "$PYTHON" ]; then
   echo "Please run the Quick Start installation commands first:"
   echo "  python3 -m venv .venv"
   echo "  source .venv/bin/activate"
-  echo "  python -m pip install -r requirements.txt"
   echo "  python -m pip install -e \".[browser]\""
   exit 1
 fi
