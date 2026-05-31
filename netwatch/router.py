@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ipaddress
-import platform
 import re
 import subprocess
 import webbrowser
@@ -12,6 +11,7 @@ from typing import Any
 
 import requests
 
+from netwatch.platform import get_backend
 from netwatch.scanner import HostScanResult
 
 
@@ -48,15 +48,7 @@ class RouterApiError(RuntimeError):
 
 def get_default_gateway() -> str | None:
     """Return the default gateway IP address when it can be detected."""
-    system = platform.system().lower()
-    if system == "darwin":
-        return parse_macos_default_gateway(run_command(["route", "-n", "get", "default"]))
-    if system == "linux":
-        gateway = parse_linux_ip_route_gateway(run_command(["ip", "route", "show", "default"]))
-        if gateway:
-            return gateway
-        return parse_linux_route_n_gateway(run_command(["route", "-n"]))
-    return None
+    return get_backend().get_default_gateway()
 
 
 def run_command(command: list[str], timeout_seconds: int = 3) -> str:

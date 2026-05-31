@@ -48,9 +48,18 @@ class ArpParsingTest(unittest.TestCase):
         self.assertIsNone(normalize_mac_address("not-a-mac"))
 
     def test_get_arp_table_keeps_numeric_macos_results(self) -> None:
-        original_platform = scanner.platform.system
         original_run_arp = scanner.run_arp_command
+        original_get_backend = scanner.get_backend
         calls: list[tuple[str, ...]] = []
+
+        class FakeBackend:
+            def get_arp_commands(self) -> list[list[str]]:
+                return [["arp", "-an"], ["arp", "-a"]]
+
+            def parse_arp_output(self, output: str) -> list[tuple[str, str]]:
+                from netwatch.platform.base import parse_bsd_arp_output
+
+                return parse_bsd_arp_output(output)
 
         def fake_run_arp(command: list[str], timeout_seconds: int = 3) -> str:
             calls.append(tuple(command))
@@ -58,16 +67,42 @@ class ArpParsingTest(unittest.TestCase):
                 return "? (192.168.31.1) at 50:4f:3b:bf:41:5 on en0 ifscope [ethernet]"
             return ""
 
-        scanner.platform.system = lambda: "Darwin"
+        scanner.get_backend = lambda: FakeBackend()
         scanner.run_arp_command = fake_run_arp
         try:
             entries = scanner.get_arp_table()
         finally:
-            scanner.platform.system = original_platform
+            scanner.get_backend = original_get_backend
             scanner.run_arp_command = original_run_arp
 
         self.assertEqual(calls, [("arp", "-an"), ("arp", "-a")])
         self.assertEqual(entries["192.168.31.1"]["mac"], "50:4f:3b:bf:41:05")
+
+    def test_ping_host_uses_backend_command(self) -> None:
+        original_get_backend = scanner.get_backend
+        original_run = scanner.subprocess.run
+        commands: list[list[str]] = []
+
+        class FakeBackend:
+            def build_ping_command(self, host: str, timeout_seconds: float) -> list[str]:
+                return ["fake-ping", host, str(timeout_seconds)]
+
+        class Completed:
+            returncode = 0
+
+        def fake_run(command, **kwargs):
+            commands.append(command)
+            return Completed()
+
+        scanner.get_backend = lambda: FakeBackend()
+        scanner.subprocess.run = fake_run
+        try:
+            assert scanner.ping_host("192.168.31.1", timeout_seconds=2) is True
+        finally:
+            scanner.get_backend = original_get_backend
+            scanner.subprocess.run = original_run
+
+        self.assertEqual(commands, [["fake-ping", "192.168.31.1", "2"]])
 
 
 class ScanNetworkArpRefreshTest(unittest.TestCase):

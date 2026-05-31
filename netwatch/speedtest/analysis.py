@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from netwatch.platform import get_backend
 from netwatch.speedtest.backends.models import SpeedtestResult
 
 CONFIDENCE_HIGH = "HIGH"
@@ -109,7 +110,8 @@ def detect_vpn_tun(result: SpeedtestResult) -> bool:
         return False
     name = str(interface.get("name") or "").lower()
     internal_ip = str(interface.get("internalIp") or "")
-    return any(keyword in name for keyword in ("utun", "tun", "tap")) or internal_ip.startswith("198.18.")
+    interface_type = get_backend().classify_interface(name, internal_ip, None)
+    return interface_type == "vpn" or internal_ip.startswith("198.18.")
 
 
 def has_high_loss_high_throughput(result: SpeedtestResult) -> bool:

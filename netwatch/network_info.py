@@ -8,6 +8,8 @@ from dataclasses import dataclass
 
 import psutil
 
+from netwatch.platform import get_backend
+
 
 @dataclass(frozen=True)
 class InterfaceInfo:
@@ -98,6 +100,8 @@ def get_display_network_interfaces() -> list[InterfaceInfo]:
 def is_excluded_interface_name(name: str) -> bool:
     """Return True for loopback, VPN, container, and virtual interfaces."""
     normalized = name.lower()
+    if get_backend().classify_interface(name) in {"loopback", "vpn", "virtual"}:
+        return True
     return any(keyword in normalized for keyword in VIRTUAL_INTERFACE_KEYWORDS)
 
 

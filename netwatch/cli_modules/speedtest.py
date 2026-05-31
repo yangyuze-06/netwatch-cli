@@ -27,6 +27,7 @@ from netwatch.config import (
 from netwatch.network_info import get_preferred_physical_interface as _default_get_preferred_physical_interface
 from netwatch.proxy_probe import probe_exit_ip as _default_probe_exit_ip
 from netwatch.speedtest.speedtest_cn import SpeedtestCnResult, is_valid_speedtest_cn_label
+from netwatch.speedtest.backends.ookla_cli import get_install_hint as get_ookla_install_hint
 from netwatch.speedtest.speedtest_cn_browser import (
     BrowserAutomationOptions,
     run_speedtest_cn_browser_automation as _default_run_speedtest_cn_browser_automation,
@@ -188,8 +189,7 @@ def print_speedtest_result_table(result: SpeedtestResult) -> None:
         console.print(f"[red]{result.error}[/red]")
         if result.backend == "none" or "Official Ookla CLI is not installed" in result.error:
             console.print("[yellow]推荐安装官方 Ookla CLI：[/yellow]")
-            console.print("[bold]brew tap teamookla/speedtest[/bold]")
-            console.print("[bold]brew install speedtest[/bold]")
+            console.print(f"[bold]{get_ookla_install_hint()}[/bold]")
         return
 
     table = Table(title="Speedtest 测速结果")
@@ -360,7 +360,7 @@ def show_speedtest_backend_info() -> None:
             (backend_info["version_output"] or "-").splitlines()[0],
         )
     console.print(table)
-    console.print("官方 Ookla CLI 安装：brew tap teamookla/speedtest && brew install speedtest")
+    console.print(f"官方 Ookla CLI 安装：{info.get('install_hint') or '-'}")
     console.print("Python speedtest-cli 仅作为 fallback，结果可能偏低。")
 
 

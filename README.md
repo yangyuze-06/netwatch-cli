@@ -20,7 +20,7 @@
 ### Requirements
 
 - Python 3.10+
-- macOS 或 Linux 终端环境
+- macOS 或 Linux 终端环境；Windows 11 当前为 experimental 支持
 - Git
 - `reverse-geocoder` Python 包，用于浏览器授权定位后的离线反向地理编码
 - 可选：Playwright Chromium，用于 `speedtest.cn` 浏览器自动化测速
@@ -59,6 +59,21 @@ netwatch
 
 ```bash
 python -m netwatch.cli
+```
+
+Windows PowerShell experimental：
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e .
+netwatch
+```
+
+如果 PowerShell 无法激活虚拟环境，可先运行：
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
 ### 安装验证

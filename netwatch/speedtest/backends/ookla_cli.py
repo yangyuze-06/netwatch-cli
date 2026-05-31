@@ -9,15 +9,10 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any
 
+from netwatch.platform import get_backend
 from netwatch.speedtest.backends.models import SpeedtestResult
 
 BACKEND_NAME = "official-ookla-cli"
-INSTALL_HINT = (
-    "Official Ookla CLI is not installed.\n"
-    "macOS 推荐安装：\n"
-    "brew tap teamookla/speedtest\n"
-    "brew install speedtest"
-)
 OOKLA_CANDIDATE_PATHS = (
     "/opt/homebrew/bin/speedtest",
     "/usr/local/bin/speedtest",
@@ -42,9 +37,10 @@ def find_ookla_speedtest_binary() -> OoklaBinaryInfo | None:
     """Find the official Ookla speedtest binary, avoiding Python speedtest-cli shadows."""
     seen: set[str] = set()
     candidates = list(OOKLA_CANDIDATE_PATHS)
-    path_candidate = shutil.which("speedtest")
-    if path_candidate:
-        candidates.append(path_candidate)
+    for candidate_name in get_backend().get_ookla_candidate_names():
+        path_candidate = shutil.which(candidate_name)
+        if path_candidate:
+            candidates.append(path_candidate)
 
     for candidate in candidates:
         if candidate in seen:
@@ -83,7 +79,7 @@ def run_speedtest(
     """Run official Ookla CLI speedtest and parse JSON output."""
     binary = find_ookla_speedtest_binary()
     if binary is None:
-        return SpeedtestResult(backend=BACKEND_NAME, error=INSTALL_HINT)
+        return SpeedtestResult(backend=BACKEND_NAME, error=get_install_hint())
 
     command = [binary.path]
     if server_id:
@@ -113,7 +109,7 @@ def list_servers() -> list[dict]:
     """List available Ookla servers when supported by the installed CLI."""
     binary = find_ookla_speedtest_binary()
     if binary is None:
-        return [{"error": INSTALL_HINT}]
+        return [{"error": get_install_hint()}]
 
     completed = run_command([binary.path, "--servers", "--format=json", "--accept-license", "--accept-gdpr"])
     if isinstance(completed, SpeedtestResult):
@@ -137,7 +133,7 @@ def get_selection_details() -> str | dict | None:
     """Return Ookla server selection details when supported."""
     binary = find_ookla_speedtest_binary()
     if binary is None:
-        return INSTALL_HINT
+        return get_install_hint()
 
     completed = run_command([binary.path, "--selection-details", "--format=json", "--accept-license", "--accept-gdpr"])
     if isinstance(completed, SpeedtestResult):
@@ -153,7 +149,7 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess[str] | Speedt
     try:
         completed = subprocess.run(command, capture_output=True, text=True, timeout=120, check=True)
     except FileNotFoundError:
-        return SpeedtestResult(backend=BACKEND_NAME, error=INSTALL_HINT)
+        return SpeedtestResult(backend=BACKEND_NAME, error=get_install_hint())
     except subprocess.TimeoutExpired:
         return SpeedtestResult(backend=BACKEND_NAME, error="Ookla CLI 测速超时。")
     except subprocess.CalledProcessError as exc:
@@ -221,3 +217,8 @@ def friendly_ookla_error(message: str) -> str | None:
     if "cannot read from socket" in message.lower():
         return "Official Ookla CLI is installed but this test failed.\nError: Cannot read from socket."
     return None
+
+
+def get_install_hint() -> str:
+    """Return a platform-aware official Ookla CLI install hint."""
+    return get_backend().get_ookla_install_hint()

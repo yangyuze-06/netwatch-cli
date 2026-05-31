@@ -47,6 +47,16 @@ def test_vpn_tun_detection_from_interface() -> None:
     assert any("TUN/VPN 虚拟网卡" in message for message in analyze_speedtest_consistency(result))
 
 
+def test_vpn_tun_detection_from_windows_interface_keywords() -> None:
+    for name in ("Wintun Userspace Tunnel", "WireGuard Tunnel", "Clash", "Tailscale"):
+        result = SpeedtestResult(
+            backend="official-ookla-cli",
+            raw={"interface": {"name": name, "internalIp": "10.0.0.2"}},
+        )
+
+        assert detect_vpn_tun(result) is True
+
+
 def test_100_mbps_upper_bound_explanation() -> None:
     result = SpeedtestResult(backend="librespeed-cli", download_mbps=96)
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ipaddress
-import platform
 import re
 import socket
 import subprocess
@@ -11,6 +10,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from netwatch.network_info import get_lan_scan_candidates
+from netwatch.platform import get_backend
+from netwatch.platform.base import normalize_mac_address as normalize_platform_mac_address
 
 
 @dataclass(frozen=True)
@@ -36,11 +37,7 @@ def infer_local_network(ip_address: str | None = None) -> ipaddress.IPv4Network 
 
 def ping_host(ip_address: str, timeout_seconds: int = 1) -> bool:
     """Return True when a host responds to one ICMP echo request."""
-    system = platform.system().lower()
-    if system == "windows":
-        command = ["ping", "-n", "1", "-w", str(timeout_seconds * 1000), ip_address]
-    else:
-        command = ["ping", "-c", "1", "-W", str(timeout_seconds), ip_address]
+    command = get_backend().build_ping_command(ip_address, timeout_seconds)
 
     try:
         completed = subprocess.run(
@@ -66,12 +63,8 @@ def resolve_hostname(ip_address: str) -> str | None:
 
 def get_arp_table() -> dict[str, dict[str, str | None]]:
     """Read the local ARP table and return IP to MAC/hostname metadata."""
-    commands = [["arp", "-a"]]
-    if platform.system().lower() != "windows":
-        # macOS can spend several seconds doing reverse lookups for `arp -a`.
-        # Numeric mode returns MAC data quickly; plain `arp -a` is only a
-        # best-effort hostname enrichment pass.
-        commands = [["arp", "-an"], ["arp", "-a"]]
+    backend = get_backend()
+    commands = backend.get_arp_commands()
 
     entries: dict[str, dict[str, str | None]] = {}
 
@@ -118,6 +111,9 @@ def merge_arp_entries(
 def parse_arp_output(output: str) -> dict[str, dict[str, str | None]]:
     """Parse common arp -a output, especially macOS IP/MAC/hostname rows."""
     entries: dict[str, dict[str, str | None]] = {}
+    for ip_address, mac in get_backend().parse_arp_output(output):
+        entries[ip_address] = {"hostname": None, "mac": mac}
+
     pattern = re.compile(
         r"^(?P<host>\S+)\s+\((?P<ip>\d{1,3}(?:\.\d{1,3}){3})\)\s+at\s+"
         r"(?P<mac>(?:[0-9a-fA-F]{1,2}:){5}[0-9a-fA-F]{1,2}|[<(]incomplete[>)])"
@@ -143,24 +139,7 @@ def parse_arp_output(output: str) -> dict[str, dict[str, str | None]]:
 
 def normalize_mac_address(mac_address: str) -> str | None:
     """Normalize a MAC address to six two-digit lowercase hex segments."""
-    if mac_address.lower() in {"<incomplete>", "(incomplete)"}:
-        return None
-
-    parts = mac_address.split(":")
-    if len(parts) != 6:
-        return None
-
-    normalized_parts: list[str] = []
-    for part in parts:
-        if not 1 <= len(part) <= 2:
-            return None
-        try:
-            value = int(part, 16)
-        except ValueError:
-            return None
-        normalized_parts.append(f"{value:02x}")
-
-    return ":".join(normalized_parts)
+    return normalize_platform_mac_address(mac_address)
 
 
 def scan_network(

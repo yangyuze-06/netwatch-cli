@@ -10,6 +10,7 @@ from netwatch.speedtest.analysis import (
 )
 from netwatch.config import get_preferred_librespeed
 from netwatch.network_info import get_preferred_physical_interface
+from netwatch.platform import get_backend
 from netwatch.speedtest.backends import librespeed_cli, ookla_cli, python_speedtest
 from netwatch.speedtest.backends.models import SpeedtestResult
 
@@ -58,8 +59,7 @@ def run_best_speedtest(use_interface: bool = True) -> SpeedtestResult:
         error=(
             "没有可用测速后端。\n"
             "推荐安装官方 Ookla CLI：\n"
-            "brew tap teamookla/speedtest\n"
-            "brew install speedtest"
+            f"{get_backend().get_ookla_install_hint()}"
         ),
     )
 
@@ -279,7 +279,7 @@ def get_speedtest_quality_details(result: SpeedtestResult) -> list[dict]:
         if isinstance(interface, dict):
             name = str(interface.get("name") or "").lower()
             internal_ip = str(interface.get("internalIp") or "")
-            is_virtual_iface = any(kw in name for kw in ("utun", "tun", "tap"))
+            is_virtual_iface = get_backend().classify_interface(name, internal_ip, None) in {"vpn", "virtual"}
             is_virtual_ip = internal_ip.startswith("198.18.")
             if is_virtual_iface or is_virtual_ip:
                 details.append({
@@ -348,6 +348,7 @@ def show_backend_info() -> dict:
             },
         },
         "install_ookla_macos": ["brew tap teamookla/speedtest", "brew install speedtest"],
+        "install_hint": get_backend().get_ookla_install_hint(),
         "notes": {
             "official-ookla-cli": "推荐后端，最接近官方客户端和网页测速。",
             "librespeed-cli": "开源备选后端，测速网络和 Ookla 不同。",

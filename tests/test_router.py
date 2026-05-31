@@ -3,10 +3,12 @@ from netwatch.router import (
     RouterDevice,
     deduplicate_router_devices,
     extract_xiaomi_stok,
+    get_default_gateway,
     merge_devices,
     normalize_xiaomi_device,
     parse_macos_default_gateway,
 )
+import netwatch.router as router
 
 
 def test_xiaomi_redmi_stok_missing_guidance_for_generic_luci_url(monkeypatch, capsys) -> None:
@@ -206,6 +208,16 @@ destination: default
 """
 
     assert parse_macos_default_gateway(output) == "192.168.31.1"
+
+
+def test_get_default_gateway_delegates_to_backend(monkeypatch) -> None:
+    class FakeBackend:
+        def get_default_gateway(self) -> str:
+            return "192.168.50.1"
+
+    monkeypatch.setattr(router, "get_backend", lambda: FakeBackend())
+
+    assert get_default_gateway() == "192.168.50.1"
 
 
 def test_deduplicate_same_ip_complete_and_empty_record() -> None:
