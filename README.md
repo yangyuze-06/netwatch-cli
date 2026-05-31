@@ -23,7 +23,7 @@
 - macOS 或 Linux 终端环境；Windows 11 当前为 experimental 支持
 - Git
 - `reverse-geocoder` Python 包，用于浏览器授权定位后的离线反向地理编码
-- 可选：Playwright Chromium，用于 `speedtest.cn` 浏览器自动化测速
+- Playwright Chromium，用于 `speedtest.cn` 浏览器自动化测速
 - 可选：官方 Ookla CLI 二进制 `speedtest`，用于 Ookla 后端
 - 可选：LibreSpeed CLI 二进制，用于 LibreSpeed 后端
 
@@ -70,16 +70,33 @@ python --version
 ### 一键运行
 
 ```powershell
+# 1.clone项目并进入文件夹
 git clone https://github.com/yangyuze-06/netwatch-cli.git
 cd netwatch-cli
+
+# 2.创建虚拟环境
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e .
-python -m pip install -e ".[browser]"
+
+# 如果 PowerShell 禁止激活脚本，先执行：
+# Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+# .\.venv\Scripts\Activate.ps1
+
+# 3. 安装基础依赖
+python -m pip install -U pip --no-cache-dir
+python -m pip install -e . --no-cache-dir
+python -m pip install -e ".[browser]" --no-cache-dir
 python -m playwright install chromium
+
+# 4. 可选：安装测试工具
+python -m pip install pytest --no-cache-dir
+
+# 5. 验证
 python -m compileall netwatch
 python -m pytest -q
+
+# 6. 启动
+
 python -m netwatch.cli
 ```
 
@@ -88,12 +105,6 @@ Windows PowerShell 不使用 `source .venv/bin/activate`。如果 PowerShell 无
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
-
-开启 VPN / Clash / TUN 后，Windows 系统默认出口网关可能显示为 `198.18.x.x`。
-`netwatch-cli` 会区分“默认出口网关”和“识别/推测的 LAN 路由器入口”；
-路由器后台入口会优先使用 Windows 明确提供的同网段 LAN 网关。找不到明确网关时，
-才会按常见家庭网络习惯推测 `192.168.x.1` 这类入口，例如 `192.168.31.1`。
-部分网络可能使用 `.254` 或其他地址，请以实际路由器配置为准。
 
 ### 安装验证
 
