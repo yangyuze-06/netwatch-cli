@@ -443,7 +443,9 @@ def test_save_debug_screenshot_uses_netwatch_debug_dir(monkeypatch, tmp_path) ->
     screenshot_path = browser_mod.save_debug_screenshot(page, enabled=True)
 
     assert screenshot_path is not None
-    assert screenshot_path.startswith(str(tmp_path / ".netwatch" / "debug"))
+    actual = Path(screenshot_path).resolve()
+    expected = (tmp_path / ".netwatch" / "debug").resolve()
+    assert actual.parent == expected or expected in actual.parents
     assert screenshot_path.endswith(".png")
-    assert Path(screenshot_path).exists()
+    assert actual.exists()
     assert page.screenshot_path == screenshot_path

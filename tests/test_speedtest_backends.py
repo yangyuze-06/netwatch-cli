@@ -1,4 +1,5 @@
 import subprocess
+import platform
 
 from netwatch.speedtest.backends.models import SpeedtestResult
 from netwatch.speedtest.backends import librespeed_cli, ookla_cli
@@ -298,7 +299,11 @@ def test_no_backend_available_returns_friendly_error(monkeypatch) -> None:
     result = speedtest_runner.run_best_speedtest()
 
     assert result.backend == "none"
-    assert "brew install speedtest" in (result.error or "")
+    error = result.error or ""
+    if platform.system().lower() == "windows":
+        assert any(token in error for token in ("speedtest.exe", "PATH", "Ookla"))
+    else:
+        assert "brew install speedtest" in error or "install speedtest" in error
 
 
 def test_find_ookla_binary_prefers_homebrew_over_venv_shadow(monkeypatch) -> None:
@@ -471,6 +476,11 @@ def test_configured_speedtest_uses_preferred_server(monkeypatch) -> None:
 def test_configured_speedtest_fallbacks_when_preferred_fails(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(speedtest_runner, "get_available_backends", lambda: ["official-ookla-cli"])
+    monkeypatch.setattr(
+        speedtest_runner,
+        "get_preferred_physical_interface",
+        lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "test"},
+    )
 
     def fake_run(backend, server_id=None, interface=None):
         calls.append((backend, server_id, interface))
