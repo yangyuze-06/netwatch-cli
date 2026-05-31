@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import subprocess
 
@@ -14,7 +15,18 @@ class BasePlatformBackend:
     """Conservative default backend for platform-specific operations."""
 
     def get_default_gateway(self) -> str | None:
-        """Return the default gateway IPv4 address when available."""
+        """Return the likely router gateway, falling back to the default-route gateway."""
+        return self.get_lan_router_gateway() or self.get_default_route_gateway()
+
+    def get_default_route_gateway(self) -> str | None:
+        """Return the system default-route gateway when available."""
+        return None
+
+    def get_lan_router_gateway(self) -> str | None:
+        """Return the likely real LAN router gateway when available."""
+        gateway = self.get_default_route_gateway()
+        if gateway and is_usable_lan_gateway_address(gateway):
+            return gateway
         return None
 
     def build_ping_command(self, host: str, timeout_seconds: float) -> list[str]:
@@ -45,6 +57,7 @@ class BasePlatformBackend:
                 "utun",
                 "wintun",
                 "wireguard",
+                "vpn",
                 "clash",
                 "tailscale",
                 "zerotier",
@@ -151,3 +164,52 @@ def is_ipv4_address(value: str) -> bool:
         return all(0 <= int(part) <= 255 for part in parts)
     except ValueError:
         return False
+
+
+def is_virtual_gateway_address(value: str) -> bool:
+    """Return True for gateway ranges commonly used by proxy/TUN/virtual networks."""
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return ip in ipaddress.ip_network("198.18.0.0/15") or ip in ipaddress.ip_network("100.64.0.0/10")
+
+
+def is_usable_lan_gateway_address(value: str) -> bool:
+    """Return True when value can be used as a real LAN router gateway candidate."""
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    if ip.version != 4:
+        return False
+    if value == "255.255.255.255":
+        return False
+    if ip.is_unspecified or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+        return False
+    return is_private_lan_address(value) and not is_virtual_gateway_address(value)
+
+
+def is_private_lan_address(value: str) -> bool:
+    """Return True for RFC1918 private LAN addresses."""
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return ip in ipaddress.ip_network("192.168.0.0/16") or ip in ipaddress.ip_network("10.0.0.0/8") or ip in ipaddress.ip_network("172.16.0.0/12")
+
+
+def infer_common_home_gateway_from_ipv4(value: str) -> str | None:
+    """Heuristically infer a common home-router gateway by replacing the last octet with 1."""
+    if not is_private_lan_address(value) or is_virtual_gateway_address(value):
+        return None
+    parts = value.split(".")
+    if len(parts) != 4:
+        return None
+    parts[-1] = "1"
+    return ".".join(parts)
+
+
+def infer_lan_router_gateway_from_ip(value: str) -> str | None:
+    """Backward-compatible alias for the common-home-router gateway heuristic."""
+    return infer_common_home_gateway_from_ipv4(value)

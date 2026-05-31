@@ -212,12 +212,101 @@ destination: default
 
 def test_get_default_gateway_delegates_to_backend(monkeypatch) -> None:
     class FakeBackend:
-        def get_default_gateway(self) -> str:
+        def get_lan_router_gateway(self) -> str:
+            return "192.168.50.1"
+
+        def get_default_route_gateway(self) -> str:
+            return "198.18.0.2"
+
+    monkeypatch.setattr(router, "get_backend", lambda: FakeBackend())
+
+    assert get_default_gateway() == "192.168.50.1"
+
+
+def test_get_default_gateway_falls_back_to_backend_default_route(monkeypatch) -> None:
+    class FakeBackend:
+        def get_lan_router_gateway(self) -> None:
+            return None
+
+        def get_default_route_gateway(self) -> str:
             return "192.168.50.1"
 
     monkeypatch.setattr(router, "get_backend", lambda: FakeBackend())
 
     assert get_default_gateway() == "192.168.50.1"
+
+
+def test_router_admin_menu_prefers_lan_gateway_over_virtual_default(monkeypatch, capsys) -> None:
+    from netwatch.cli_modules import router as cli_router
+
+    monkeypatch.setattr(cli_router, "get_lan_router_gateway", lambda: "192.168.31.1")
+    monkeypatch.setattr(cli_router, "get_default_route_gateway", lambda: "198.18.0.2")
+    monkeypatch.setattr(cli_router.Prompt, "ask", lambda *args, **kwargs: "1")
+
+    url = cli_router.choose_router_admin_url()
+
+    output = capsys.readouterr().out
+    assert url == "http://192.168.31.1/"
+    assert "识别/推测的 LAN 路由器入口，推荐" in output
+    assert "当前系统默认出口网关：198.18.0.2" in output
+    assert "可能来自 VPN/TUN/代理" in output
+    assert "http://198.18.0.2/" not in output
+    assert "http://192.168.31.1/" in output
+    assert "http://miwifi.com/" in output
+
+
+def test_router_admin_menu_does_not_offer_198_19_virtual_default(monkeypatch, capsys) -> None:
+    from netwatch.cli_modules import router as cli_router
+
+    monkeypatch.setattr(cli_router, "get_lan_router_gateway", lambda: None)
+    monkeypatch.setattr(cli_router, "get_default_route_gateway", lambda: "198.19.0.2")
+    monkeypatch.setattr(cli_router.Prompt, "ask", lambda *args, **kwargs: "0")
+
+    url = cli_router.choose_router_admin_url()
+
+    output = capsys.readouterr().out
+    assert url is None
+    assert "当前系统默认出口网关：198.19.0.2" in output
+    assert "http://198.19.0.2/" not in output
+    assert "http://192.168.31.1/" in output
+
+
+def test_router_admin_menu_does_not_offer_100_64_virtual_default(monkeypatch, capsys) -> None:
+    from netwatch.cli_modules import router as cli_router
+
+    monkeypatch.setattr(cli_router, "get_lan_router_gateway", lambda: None)
+    monkeypatch.setattr(cli_router, "get_default_route_gateway", lambda: "100.64.0.1")
+    monkeypatch.setattr(cli_router.Prompt, "ask", lambda *args, **kwargs: "0")
+
+    url = cli_router.choose_router_admin_url()
+
+    output = capsys.readouterr().out
+    assert url is None
+    assert "当前系统默认出口网关：100.64.0.1" in output
+    assert "http://100.64.0.1/" not in output
+    assert "http://192.168.31.1/" in output
+
+
+def test_xiaomi_sync_uses_lan_gateway_not_virtual_default(monkeypatch) -> None:
+    from netwatch.cli_modules import router as cli_router
+
+    calls: list[tuple[str, str]] = []
+    answers = iter(["http://192.168.31.1/cgi-bin/luci/;stok=abc/web/home"])
+
+    monkeypatch.setattr(cli_router, "get_lan_router_gateway", lambda: "192.168.31.1")
+    monkeypatch.setattr(cli_router, "get_default_gateway", lambda: "198.18.0.2")
+    monkeypatch.setattr(cli_router.Prompt, "ask", lambda *args, **kwargs: next(answers))
+
+    def fake_fetch(router_ip: str, stok: str) -> list[RouterDevice]:
+        calls.append((router_ip, stok))
+        return []
+
+    monkeypatch.setattr(cli_router, "fetch_xiaomi_device_list", fake_fetch)
+
+    result = cli_router.prompt_and_fetch_xiaomi_redmi_stok_devices()
+
+    assert result == []
+    assert calls == [("192.168.31.1", "abc")]
 
 
 def test_deduplicate_same_ip_complete_and_empty_record() -> None:

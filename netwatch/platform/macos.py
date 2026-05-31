@@ -10,7 +10,7 @@ from netwatch.platform.base import BasePlatformBackend
 class MacOSBackend(BasePlatformBackend):
     """macOS implementation preserving existing command semantics."""
 
-    def get_default_gateway(self) -> str | None:
+    def get_default_route_gateway(self) -> str | None:
         """Return the default gateway from `route -n get default`."""
         return parse_macos_default_gateway(self.run_command(["route", "-n", "get", "default"]))
 

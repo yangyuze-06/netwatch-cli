@@ -10,7 +10,7 @@ from netwatch.platform.base import BasePlatformBackend
 class LinuxBackend(BasePlatformBackend):
     """Linux implementation preserving existing route parsing semantics."""
 
-    def get_default_gateway(self) -> str | None:
+    def get_default_route_gateway(self) -> str | None:
         """Return default gateway from `ip route`, falling back to `route -n`."""
         gateway = parse_linux_ip_route_gateway(self.run_command(["ip", "route", "show", "default"]))
         if gateway:

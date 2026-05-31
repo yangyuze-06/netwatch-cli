@@ -10,7 +10,10 @@ from netwatch.router import (
     RouterDevice,
     extract_xiaomi_stok,
     fetch_xiaomi_device_list,
+    get_default_route_gateway as _default_get_default_route_gateway,
     get_default_gateway as _default_get_default_gateway,
+    get_lan_router_gateway as _default_get_lan_router_gateway,
+    is_virtual_gateway,
     mask_stok,
 )
 from netwatch.cli_modules.common import cli_override, console
@@ -20,6 +23,22 @@ LAST_ROUTER_DEVICES: list[RouterDevice] = []
 
 def get_default_gateway():
     return cli_override("get_default_gateway", _default_get_default_gateway, current=get_default_gateway)()
+
+
+def get_default_route_gateway():
+    return cli_override(
+        "get_default_route_gateway",
+        _default_get_default_route_gateway,
+        current=get_default_route_gateway,
+    )()
+
+
+def get_lan_router_gateway():
+    return cli_override(
+        "get_lan_router_gateway",
+        _default_get_lan_router_gateway,
+        current=get_lan_router_gateway,
+    )()
 
 
 def show_open_router_admin() -> None:
@@ -35,10 +54,13 @@ def show_open_router_admin() -> None:
 
 def choose_router_admin_url() -> str | None:
     """Let the user choose a common router admin URL."""
-    gateway = get_default_gateway()
+    lan_gateway = get_lan_router_gateway()
+    default_route_gateway = get_default_route_gateway()
     options: list[tuple[str, str]] = []
-    if gateway:
-        options.append((f"http://{gateway}/", "当前默认网关，推荐"))
+    if lan_gateway:
+        options.append((f"http://{lan_gateway}/", "识别/推测的 LAN 路由器入口，推荐"))
+    elif default_route_gateway and not is_virtual_gateway(default_route_gateway):
+        options.append((f"http://{default_route_gateway}/", "当前默认出口网关，可能是路由器"))
 
     options.extend(
         [
@@ -52,7 +74,19 @@ def choose_router_admin_url() -> str | None:
         ]
     )
 
-    console.print("[bold]检测到当前默认网关：[/bold]" if gateway else "[yellow]未检测到当前默认网关。[/yellow]")
+    if lan_gateway:
+        console.print(f"[bold]识别/推测的 LAN 路由器入口：[/bold]{lan_gateway}")
+    else:
+        console.print("[yellow]未检测到真实局域网路由器网关。[/yellow]")
+    if default_route_gateway and default_route_gateway != lan_gateway:
+        if is_virtual_gateway(default_route_gateway):
+            console.print(
+                f"[yellow]当前系统默认出口网关：{default_route_gateway}，"
+                "可能来自 VPN/TUN/代理，不一定是路由器。[/yellow]"
+            )
+        else:
+            console.print(f"[dim]当前系统默认出口网关：{default_route_gateway}[/dim]")
+
     table = Table(title="路由器管理后台入口")
     table.add_column("#", justify="right")
     table.add_column("URL", style="bold cyan")
@@ -66,7 +100,7 @@ def choose_router_admin_url() -> str | None:
     console.print(table)
 
     choices = [str(index) for index in range(1, manual_index + 1)] + ["0"]
-    default = "1" if gateway else str(manual_index)
+    default = "1" if options else str(manual_index)
     choice = Prompt.ask("请选择要打开的入口", choices=choices, default=default)
 
     if choice == "0":
@@ -138,7 +172,7 @@ def print_missing_stok_guidance(pasted_url: str) -> None:
 def prompt_and_fetch_xiaomi_redmi_stok_devices() -> list[RouterDevice] | None:
     """Prompt for Xiaomi/Redmi stok URL and fetch device list."""
     global LAST_ROUTER_DEVICES
-    gateway = get_default_gateway()
+    gateway = get_lan_router_gateway() or get_default_gateway()
     if not gateway:
         gateway = Prompt.ask("请输入路由器地址，例如 192.168.31.1").strip()
     if not gateway:
@@ -167,5 +201,3 @@ def prompt_and_fetch_xiaomi_redmi_stok_devices() -> list[RouterDevice] | None:
     LAST_ROUTER_DEVICES = router_devices
     console.print(f"[green]从路由器同步到 {len(router_devices)} 台设备。[/green]")
     return router_devices
-
-

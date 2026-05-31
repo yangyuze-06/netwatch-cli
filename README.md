@@ -89,6 +89,12 @@ Windows PowerShell 不使用 `source .venv/bin/activate`。如果 PowerShell 无
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
+开启 VPN / Clash / TUN 后，Windows 系统默认出口网关可能显示为 `198.18.x.x`。
+`netwatch-cli` 会区分“默认出口网关”和“识别/推测的 LAN 路由器入口”；
+路由器后台入口会优先使用 Windows 明确提供的同网段 LAN 网关。找不到明确网关时，
+才会按常见家庭网络习惯推测 `192.168.x.1` 这类入口，例如 `192.168.31.1`。
+部分网络可能使用 `.254` 或其他地址，请以实际路由器配置为准。
+
 ### 安装验证
 
 安装完成后，在项目根目录运行：

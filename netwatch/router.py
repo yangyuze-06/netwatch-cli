@@ -12,6 +12,7 @@ from typing import Any
 import requests
 
 from netwatch.platform import get_backend
+from netwatch.platform.base import is_virtual_gateway_address
 from netwatch.scanner import HostScanResult
 
 
@@ -47,8 +48,23 @@ class RouterApiError(RuntimeError):
 
 
 def get_default_gateway() -> str | None:
-    """Return the default gateway IP address when it can be detected."""
-    return get_backend().get_default_gateway()
+    """Return the likely real LAN router gateway when it can be detected."""
+    return get_lan_router_gateway() or get_default_route_gateway()
+
+
+def get_default_route_gateway() -> str | None:
+    """Return the system default-route gateway, which may be a VPN/TUN gateway."""
+    return get_backend().get_default_route_gateway()
+
+
+def get_lan_router_gateway() -> str | None:
+    """Return the likely real LAN router gateway."""
+    return get_backend().get_lan_router_gateway()
+
+
+def is_virtual_gateway(gateway: str | None) -> bool:
+    """Return True for proxy/TUN/virtual gateway address ranges."""
+    return bool(gateway and is_virtual_gateway_address(gateway))
 
 
 def run_command(command: list[str], timeout_seconds: int = 3) -> str:
