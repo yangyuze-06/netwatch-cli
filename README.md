@@ -120,6 +120,11 @@ scripts/check_install.sh
 ```bash
 python -m playwright install chromium
 ```
+### 同步管理
+
+```bash
+git status; git pull --ff-only origin main
+```
 
 ## 可选外部工具
 
@@ -149,27 +154,6 @@ LibreSpeed CLI 是外部二进制，不由 `requirements.txt` 管理。未安装
 
 ## 使用
 
-启动交互式主菜单时会先显示一个轻量 banner 动画：
-
-```text
-Created By
-
-                 __   ___            _____ __    ___
-                / /  <  /___  ____ _/ ___// /_  <  /
-               / /   / / __ \/ __ `/\__ \/ __ \ / /
-              / /___/ / / / / /_/ /___/ / / / // /
-              \____/_/_/ /_/\__, //____/_/ /_//_/
-                         /____/
-```
-
-如需关闭启动动画：
-
-```bash
-NETWATCH_NO_ANIMATION=1 netwatch
-```
-
-随后进入主菜单：
-
 ```text
 1. 查看实时网卡流量
 2. 查看本机网络信息
@@ -181,7 +165,7 @@ NETWATCH_NO_ANIMATION=1 netwatch
 8. 退出
 ```
 
-查看实时网卡流量时，按 `Ctrl+C` 返回菜单。主菜单按 `Ctrl+C` 会优雅退出。
+查看实时网卡流量时，按 `Ctrl+C` 返回菜单。主菜单按 `Ctrl+C` 会直接退出。
 
 ## 隐私说明
 
@@ -189,6 +173,7 @@ NETWATCH_NO_ANIMATION=1 netwatch
 - 浏览器授权定位只在用户手动选择并允许浏览器权限时运行。
 - `netwatch-cli` 不保存、不上传用户真实位置。
 - 离线中国行政区划匹配完全在本地完成。
+- 实验性精确离线定位只把浏览器坐标回传到本机 `127.0.0.1` 临时服务，优先用本地边界 GeoJSON 判断行政区，失败时回退到中心点最近邻。
 - 高德/百度 API 不是默认依赖；默认运行不需要地图服务 Key。
 - 配置文件 `~/.netwatch/config.json` 只保存非敏感偏好，不保存密码、`stok`、token、cookie 或公网 IP。
 
@@ -201,6 +186,19 @@ NETWATCH_NO_ANIMATION=1 netwatch
 - 构建阶段可临时使用 AreaCity 的 `ok_geo.csv.7z` 提取中心点，但不把 130MB+ 解压数据放入项目。
 - 当前算法是“区县中心点最近邻”，不是真实行政边界。
 - 区县交界处可能误判。例如广州永和附近可能返回黄埔区或增城区。
+
+实验性精确离线定位必须配置用户本机真实 GeoJSON 数据后，才会执行精确边界/道路识别：
+
+```bash
+python -m pip install -e ".[geo]"
+export NETWATCH_BOUNDARY_GEOJSON=/path/to/real_boundary.geojson
+export NETWATCH_ROADS_GEOJSON=/path/to/real_roads.geojson
+netwatch
+```
+
+仓库只内置很小的 sample boundary/roads 数据用于测试和演示，不提交大型全国边界或 OSM 数据。
+正式 CLI 运行默认不会把 sample 当作真实定位结果；如需演示 sample，可显式设置
+`NETWATCH_USE_SAMPLE_GEO=1`，输出会标注 sample/demo。CLI 只显示“附近道路/街道”，不会声称是精确门牌地址。
 
 重建数据：
 

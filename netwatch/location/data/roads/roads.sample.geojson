@@ -1,0 +1,36 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "永和大道",
+        "highway": "primary",
+        "ref": "S118",
+        "osm_id": "sample-road-1"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [113.57, 23.153],
+          [113.60, 23.153]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "新业路",
+        "highway": "residential",
+        "osm_id": "sample-road-2"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [113.581, 23.145],
+          [113.581, 23.165]
+        ]
+      }
+    }
+  ]
+}

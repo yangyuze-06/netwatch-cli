@@ -41,7 +41,12 @@ from netwatch.cli_modules.lan import (
     show_lan_discovery_menu,
     show_router_only_device_sync,
 )
-from netwatch.cli_modules.location import print_device_location_result, show_network_info
+from netwatch.cli_modules.location import (
+    print_device_location_result,
+    print_precise_location_report,
+    show_network_info,
+    show_precise_offline_location,
+)
 from netwatch.cli_modules.router import (
     choose_router_admin_url,
     choose_router_sync_method,
@@ -152,7 +157,8 @@ def build_advanced_menu() -> Panel:
             "[bold cyan]10[/bold cyan]. 显示 Ookla server selection details",
             "[bold cyan]11[/bold cyan]. LibreSpeed 自定义服务器列表测速",
             "[bold cyan]12[/bold cyan]. 打开 speedtest.cn 网页对照测速",
-            "[bold cyan]13[/bold cyan]. 返回主菜单",
+            "[bold cyan]13[/bold cyan]. 实验功能：浏览器授权 + 离线精确行政区/附近街道定位",
+            "[bold cyan]14[/bold cyan]. 返回主菜单",
         ]
     )
     return Panel(menu, title="高级功能", border_style="cyan")
@@ -167,8 +173,8 @@ def show_advanced_menu() -> None:
             console.print("[yellow]该结果受测速服务器池、网络路径、代理/TUN 和服务器质量影响，不一定代表本地宽带最大值。[/yellow]")
             choice = Prompt.ask(
                 "请选择高级功能",
-                choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"],
-                default="13",
+                choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"],
+                default="14",
             )
             if choice == "1":
                 show_auto_speedtest()
@@ -195,6 +201,8 @@ def show_advanced_menu() -> None:
             elif choice == "12":
                 open_speedtest_cn_reference()
             elif choice == "13":
+                show_precise_offline_location()
+            elif choice == "14":
                 break
         except KeyboardInterrupt:
             console.print("\n[yellow]已返回主菜单。[/yellow]")

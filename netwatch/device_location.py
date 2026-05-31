@@ -30,9 +30,10 @@ button { font-size: 1.2em; padding: 0.6em 1.2em; cursor: pointer; }
 </head>
 <body>
 <h2>netwatch-cli 设备定位</h2>
-<p>点击下方按钮以获取当前位置。</p>
+<p>netwatch-cli 正在请求一次性定位权限。</p>
 <p class="info">浏览器会弹出权限请求，请选择“允许”。</p>
-<p class="info">本页面仅用于本次定位，不会保存或上传你的位置。</p>
+<p class="info">坐标只会回传到本机 127.0.0.1 临时服务，不会上传互联网。</p>
+<p class="info">本页面仅用于本次定位，netwatch-cli 不会保存或上传你的位置。</p>
 <button id="locateBtn">获取当前位置</button>
 <p id="status"></p>
 <script>
@@ -48,7 +49,12 @@ document.getElementById('locateBtn').addEventListener('click', function() {
             xhr.send(JSON.stringify({
                 latitude: pos.coords.latitude,
                 longitude: pos.coords.longitude,
-                accuracy: pos.coords.accuracy
+                accuracy: pos.coords.accuracy,
+                altitude: pos.coords.altitude,
+                altitudeAccuracy: pos.coords.altitudeAccuracy,
+                heading: pos.coords.heading,
+                speed: pos.coords.speed,
+                timestamp: pos.timestamp
             }));
             status.textContent = '\u5b9a\u4f4d\u6210\u529f\uff0c\u6b63\u5728\u8fd4\u56de\u7ec8\u7aef...';
             status.className = 'success';
@@ -64,7 +70,7 @@ document.getElementById('locateBtn').addEventListener('click', function() {
             status.textContent = '\u5b9a\u4f4d\u5931\u8d25: ' + err.message;
             status.className = 'error';
         },
-        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
 });
 </script>
@@ -79,6 +85,11 @@ class DeviceLocationResult:
     latitude: float | None = None
     longitude: float | None = None
     accuracy_m: float | None = None
+    altitude: float | None = None
+    altitude_accuracy: float | None = None
+    heading: float | None = None
+    speed: float | None = None
+    timestamp: float | None = None
     source: str = "browser geolocation"
     error: str | None = None
     country: str | None = None
@@ -231,6 +242,11 @@ def _make_handler(shared_state: list) -> type[BaseHTTPRequestHandler]:
                     latitude=payload["latitude"],
                     longitude=payload["longitude"],
                     accuracy_m=payload["accuracy"],
+                    altitude=payload.get("altitude"),
+                    altitude_accuracy=payload.get("altitudeAccuracy"),
+                    heading=payload.get("heading"),
+                    speed=payload.get("speed"),
+                    timestamp=payload.get("timestamp"),
                 )
                 shared_state[1].set()
                 self._respond_ok("定位已接收，可以关闭此页面。")

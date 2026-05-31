@@ -19,8 +19,8 @@ dependencies = [
 [project.optional-dependencies]
 browser = ["playwright>=1.44"]
 dev = ["pytest>=8.0"]
-all = ["playwright>=1.44", "pytest>=8.0"]
-geo = ["reverse-geocoder>=1.5.1"]
+all = ["playwright>=1.44", "pytest>=8.0", "shapely>=2.0"]
+geo = ["reverse-geocoder>=1.5.1", "shapely>=2.0"]
 
 [project.scripts]
 netwatch = "netwatch.cli:main"
@@ -32,6 +32,10 @@ include = ["netwatch*"]
 netwatch = [
     "location/data/README.md",
     "location/data/china_district_centers.csv",
+    "location/data/boundaries/README.md",
+    "location/data/boundaries/*.geojson",
+    "location/data/roads/README.md",
+    "location/data/roads/*.geojson",
 ]
 
 [tool.pytest.ini_options]

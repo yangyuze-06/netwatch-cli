@@ -222,7 +222,8 @@ def test_build_advanced_menu_contains_general_diagnosis_entry() -> None:
     rendered = build_advanced_menu().renderable
 
     assert "1[/bold cyan]. 通用测速诊断（Ookla / LibreSpeed / Python fallback）" in rendered
-    assert "13[/bold cyan]. 返回主菜单" in rendered
+    assert "13[/bold cyan]. 实验功能：浏览器授权 + 离线精确行政区/附近街道定位" in rendered
+    assert "14[/bold cyan]. 返回主菜单" in rendered
     assert "实验：自动浏览器测速" not in rendered
 
 

@@ -6,6 +6,8 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from netwatch.device_location import DeviceLocationResult, run_browser_geolocation as _default_run_browser_geolocation
+from netwatch.location.models import PreciseLocationReport
+from netwatch.location.precise_location import run_precise_location_report as _default_run_precise_location_report
 from netwatch.network_info import (
     get_display_network_interfaces as _default_get_display_network_interfaces,
     get_preferred_physical_interface as _default_get_preferred_physical_interface,
@@ -44,6 +46,14 @@ def run_browser_geolocation(*args, **kwargs):
         "run_browser_geolocation",
         _default_run_browser_geolocation,
         current=run_browser_geolocation,
+    )(*args, **kwargs)
+
+
+def run_precise_location_report(*args, **kwargs):
+    return cli_override(
+        "run_precise_location_report",
+        _default_run_precise_location_report,
+        current=run_precise_location_report,
     )(*args, **kwargs)
 
 
@@ -180,5 +190,90 @@ def print_device_location_result(result: DeviceLocationResult) -> None:
     console.print("[dim]区县位置来自离线最近中心点匹配，不是真实行政边界。[/dim]")
 
 
+def show_precise_offline_location() -> None:
+    """Run the experimental precise offline location flow."""
+    console.print("[yellow]实验功能：将打开本地临时网页请求一次性浏览器定位权限。[/yellow]")
+    console.print("[yellow]坐标只回传到 127.0.0.1 临时服务，并在本次命令运行期间用于离线识别。[/yellow]")
+    try:
+        confirm = Prompt.ask("是否继续？", choices=["y", "n"], default="n")
+    except KeyboardInterrupt:
+        console.print("\n[yellow]已返回高级菜单。[/yellow]")
+        return
+    if confirm.lower() != "y":
+        console.print("[yellow]已取消。[/yellow]")
+        return
+
+    with console.status("[bold green]等待浏览器授权并执行离线定位...[/bold green]"):
+        report = run_precise_location_report()
+    print_precise_location_report(report)
+
+
+def print_precise_location_report(report: PreciseLocationReport) -> None:
+    """Print an experimental precise location report."""
+    console.print("[bold cyan]==============================[/bold cyan]")
+    console.print("[bold cyan]netwatch precise location[/bold cyan]")
+    console.print("[bold cyan]==============================[/bold cyan]")
+
+    browser_table = Table(title="Browser location")
+    browser_table.add_column("Field", style="bold cyan")
+    browser_table.add_column("Value")
+    if report.browser is None:
+        browser_table.add_row("Status", "Unavailable")
+    else:
+        browser_table.add_row("Latitude", f"{report.browser.latitude:.6f}")
+        browser_table.add_row("Longitude", f"{report.browser.longitude:.6f}")
+        browser_table.add_row("Accuracy", f"±{report.browser.accuracy_m:.0f} m" if report.browser.accuracy_m is not None else "-")
+        browser_table.add_row("Source", report.browser.source)
+    console.print(browser_table)
+
+    admin_table = Table(title="Offline administrative region")
+    admin_table.add_column("Field", style="bold cyan")
+    admin_table.add_column("Value")
+    if report.admin is None:
+        admin_table.add_row("Result", "Precise boundary unavailable.")
+    else:
+        is_sample_admin = report.admin.source in {"offline_boundary_sample", "sample_boundary"}
+        if is_sample_admin:
+            admin_table.add_row("Data mode", "sample")
+        if report.fallback_used:
+            admin_table.add_row("Fallback", "nearest district center")
+        sample_prefix = "[样例数据] " if is_sample_admin else ""
+        admin_table.add_row("Province", f"{sample_prefix}{report.admin.province}" if report.admin.province else "-")
+        admin_table.add_row("City", f"{sample_prefix}{report.admin.city}" if report.admin.city else "-")
+        district = report.admin.district or report.admin.raw_name
+        admin_table.add_row("District", f"{sample_prefix}{district}" if district else "-")
+        admin_table.add_row("Adcode", report.admin.adcode or "-")
+        admin_table.add_row("Confidence", report.admin.confidence)
+        if report.admin.distance_km is not None:
+            admin_table.add_row("Distance to district center", f"{report.admin.distance_km:.1f} km")
+        admin_table.add_row("Source", report.admin.source)
+    console.print(admin_table)
+
+    has_sample_roads = any(road.source in {"offline_roads_sample", "sample_roads"} for road in report.nearby_roads)
+    roads_title = "Nearby roads / streets (sample data)" if has_sample_roads else "Nearby roads / streets"
+    roads_table = Table(title=roads_title)
+    roads_table.add_column("#", justify="right", style="bold cyan")
+    roads_table.add_column("Name")
+    roads_table.add_column("Type")
+    roads_table.add_column("Distance", justify="right")
+    if report.nearby_roads:
+        for idx, road in enumerate(report.nearby_roads, start=1):
+            label = road.name or road.ref or "-"
+            road_type = road.highway or road.ref or "-"
+            distance = f"{road.distance_m:.0f} m" if road.distance_m is not None else "-"
+            roads_table.add_row(str(idx), label, road_type, distance)
+    else:
+        roads_table.add_row("-", "nearby street unavailable", "-", "-")
+    console.print(roads_table)
+
+    if report.warnings:
+        warning_table = Table(title="Warnings")
+        warning_table.add_column("Message", style="yellow")
+        for warning in report.warnings:
+            warning_table.add_row(warning)
+        console.print(warning_table)
+
+    console.print("[dim]Privacy: This location was processed locally only. Nothing was uploaded.[/dim]")
+    console.print("[dim]附近道路/街道不是精确门牌地址。[/dim]")
 
 
