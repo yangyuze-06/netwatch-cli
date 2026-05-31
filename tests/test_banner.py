@@ -2,11 +2,19 @@ import io
 
 from rich.console import Console
 
-from netwatch.cli_modules.banner import LOGO_LINES, print_banner, render_banner
+from netwatch.cli_modules import banner as banner_mod
+from netwatch.cli_modules.banner import (
+    LOGO_LINES,
+    play_startup_animation,
+    print_banner,
+    render_banner,
+    render_loading_bar,
+    should_animate,
+)
 
 
 def test_render_banner_outputs_expected_fragments() -> None:
-    output = render_banner(width=80)
+    output = render_banner(width=100)
 
     assert "Created By" in output
     assert "__   ___" in output
@@ -28,6 +36,47 @@ def test_print_banner_uses_rendered_banner(capsys) -> None:
 
     assert output.startswith("Created By\n\n")
     assert "netwatch-cli" not in output
+
+
+def test_render_loading_bar_percentages() -> None:
+    assert "  0%" in render_loading_bar(0, 10)
+    assert " 50%" in render_loading_bar(5, 10)
+    assert "100%" in render_loading_bar(10, 10)
+
+
+def test_should_animate_false_when_disabled_by_env(monkeypatch) -> None:
+    monkeypatch.setenv("NETWATCH_NO_ANIMATION", "1")
+    monkeypatch.setattr(banner_mod.sys.stdout, "isatty", lambda: True)
+
+    assert should_animate() is False
+
+
+def test_play_startup_animation_renders_frames_without_sleeping(monkeypatch, capsys) -> None:
+    clear_calls = []
+    render_calls = []
+    sleep_calls = []
+
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("NETWATCH_NO_ANIMATION", raising=False)
+    monkeypatch.setattr(banner_mod.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(banner_mod, "terminal_width", lambda: 80)
+    monkeypatch.setattr(banner_mod, "clear_screen", lambda: clear_calls.append("clear"))
+    monkeypatch.setattr(
+        banner_mod,
+        "render_banner",
+        lambda width=None: render_calls.append(width) or render_banner(width=width),
+    )
+    monkeypatch.setattr(banner_mod.time, "sleep", lambda delay: sleep_calls.append(delay))
+
+    play_startup_animation(duration=0.5)
+
+    output = capsys.readouterr().out
+
+    assert "Initializing netwatch-core" in output
+    assert "100%" in output
+    assert render_calls == [80]
+    assert len(clear_calls) == 2
+    assert len(sleep_calls) == 11
 
 
 def run_main_menu_exit(monkeypatch, *, interactive: bool) -> list[str]:

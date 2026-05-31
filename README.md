@@ -149,7 +149,7 @@ LibreSpeed CLI 是外部二进制，不由 `requirements.txt` 管理。未安装
 
 ## 使用
 
-启动交互式主菜单时会先显示作者 banner：
+启动交互式主菜单时会先显示一个轻量 banner 动画：
 
 ```text
 Created By
@@ -160,6 +160,12 @@ Created By
               / /___/ / / / / /_/ /___/ / / / // /
               \____/_/_/ /_/\__, //____/_/ /_//_/
                          /____/
+```
+
+如需关闭启动动画：
+
+```bash
+NETWATCH_NO_ANIMATION=1 netwatch
 ```
 
 随后进入主菜单：
