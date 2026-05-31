@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
@@ -29,6 +31,7 @@ from netwatch.router import (
     scan_results_to_network_devices,
 )
 from netwatch.speedtest.speed import format_speed, sample_network_speed
+from netwatch.cli_modules.banner import print_banner
 from netwatch.cli_modules.lan import (
     build_lan_discovery_menu,
     choose_lan_scan_candidate,
@@ -77,6 +80,11 @@ from netwatch.cli_modules.speedtest import (
 from netwatch.proxy_probe import probe_exit_ip
 
 console = Console()
+
+
+def _is_interactive_session() -> bool:
+    """Return True when the main menu is running in an interactive terminal."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
 
 
 def build_menu() -> Panel:
@@ -195,6 +203,9 @@ def show_advanced_menu() -> None:
 
 def main() -> None:
     """Run the interactive menu."""
+    if _is_interactive_session():
+        print_banner()
+
     try:
         while True:
             console.print(build_menu())
