@@ -100,10 +100,11 @@ python -m pytest -q
 python -m netwatch.cli
 ```
 
-Windows PowerShell 不使用 `source .venv/bin/activate`。如果 PowerShell 无法激活虚拟环境，可先运行：
+再次启动命令如下：
 
 ```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.\.venv\Scripts\Activate.ps1
+python -m netwatch.cli
 ```
 
 ### 安装验证
