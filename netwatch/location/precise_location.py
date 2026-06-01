@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from netwatch.location.admin.coord_transform import BoundaryCoordSystem, wgs84_to_gcj02
-from netwatch.device_location import DeviceLocationResult, run_browser_geolocation
+from netwatch.location.geolocation.device import DeviceLocationResult, run_browser_geolocation
 from netwatch.location.admin.china_admin_lookup import lookup_nearest_district
 from netwatch.location.models import AdminLocationResult, BrowserLocationResult, PreciseLocationReport
 from netwatch.location.roads.nearby_roads import (

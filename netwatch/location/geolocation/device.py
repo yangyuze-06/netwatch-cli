@@ -304,6 +304,7 @@ def run_browser_geolocation(timeout_seconds: int = 60) -> DeviceLocationResult:
         )
     finally:
         server.shutdown()
+        server.server_close()
 
 
 def get_device_location_html_source() -> str:

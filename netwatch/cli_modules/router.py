@@ -5,7 +5,7 @@ from __future__ import annotations
 from rich.prompt import Prompt
 from rich.table import Table
 
-from netwatch.router import (
+from netwatch.network.router import (
     RouterApiError,
     RouterDevice,
     extract_xiaomi_stok,

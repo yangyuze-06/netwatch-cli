@@ -6,8 +6,8 @@ from netwatch.speedtest.backends import librespeed_cli, ookla_cli
 from netwatch.speedtest.backends.ookla_cli import parse_ookla_result
 from netwatch.speedtest.backends.python_speedtest import result_from_bits
 from netwatch.speedtest import runner as speedtest_runner
-from netwatch.network_info import InterfaceInfo
-from netwatch import network_info
+from netwatch.network.info import InterfaceInfo
+from netwatch.network import info as network_info
 
 
 def test_speedtest_result_dataclass() -> None:
@@ -816,7 +816,7 @@ def test_show_auto_speedtest_smoke_no_crash(monkeypatch) -> None:
     """show_auto_speedtest must not crash when run_best_speedtest returns a real result."""
     import io
     from netwatch.cli import show_auto_speedtest, Console
-    from netwatch import config
+    from netwatch.core import config
 
     test_result = SpeedtestResult(
         backend="official-ookla-cli",
@@ -1036,7 +1036,7 @@ def run_proxy_speedtest_with_answers(monkeypatch, answer: str, test_result=None)
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     prompts = []
     answer_iter = iter([answer])
@@ -1151,7 +1151,7 @@ def test_proxy_speedtest_vpn_tun_judgment(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
     from netwatch.speedtest.runner import SpeedtestResult
 
     test_result = SpeedtestResult(
@@ -1187,7 +1187,7 @@ def test_proxy_speedtest_no_vpn_tun_judgment(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
     from netwatch.speedtest.runner import SpeedtestResult
 
     test_result = SpeedtestResult(
@@ -1223,7 +1223,7 @@ def test_show_auto_speedtest_still_shows_detailed(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch import config
+    from netwatch.core import config
 
     test_result = SpeedtestResult(
         backend="official-ookla-cli",
@@ -1266,8 +1266,8 @@ def run_network_info_with_answers(monkeypatch, full_interfaces_answer: str) -> s
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(
         cli_mod, "get_preferred_physical_interface",
@@ -1340,8 +1340,8 @@ def test_network_info_asks_full_interfaces_prompt(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
@@ -1387,8 +1387,8 @@ def test_network_info_exit_failure_no_traceback(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")

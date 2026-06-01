@@ -8,8 +8,8 @@ from netwatch.speedtest.analysis import (
     get_analysis_summary,
     get_result_confidence,
 )
-from netwatch.config import get_preferred_librespeed
-from netwatch.network_info import get_preferred_physical_interface
+from netwatch.core.config import get_preferred_librespeed
+from netwatch.network.info import get_preferred_physical_interface
 from netwatch.platform import get_backend
 from netwatch.speedtest.backends import librespeed_cli, ookla_cli, python_speedtest
 from netwatch.speedtest.backends.models import SpeedtestResult

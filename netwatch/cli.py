@@ -10,15 +10,15 @@ from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
-from netwatch.device_location import DeviceLocationResult, run_browser_geolocation
-from netwatch.network_info import (
+from netwatch.location.geolocation.device import DeviceLocationResult, run_browser_geolocation
+from netwatch.network.info import (
     NetworkCandidate,
     get_display_network_interfaces,
     get_lan_scan_candidates,
     get_preferred_physical_interface,
 )
-from netwatch.scanner import scan_network
-from netwatch.router import (
+from netwatch.network.scanner import scan_network
+from netwatch.network.router import (
     NetworkDevice,
     RouterApiError,
     RouterDevice,
@@ -31,7 +31,7 @@ from netwatch.router import (
     scan_results_to_network_devices,
 )
 from netwatch.speedtest.speed import format_speed, sample_network_speed
-from netwatch.cli_modules.banner import print_banner
+from netwatch.core.banner import print_banner
 from netwatch.cli_modules.lan import (
     build_lan_discovery_menu,
     choose_lan_scan_candidate,
@@ -82,7 +82,7 @@ from netwatch.cli_modules.speedtest import (
     show_speedtest_config,
     format_speedtest_cn_label,
 )
-from netwatch.proxy_probe import probe_exit_ip
+from netwatch.network.proxy_probe import probe_exit_ip
 
 console = Console()
 

@@ -9,7 +9,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-from netwatch.network_info import get_lan_scan_candidates
+from netwatch.network.info import get_lan_scan_candidates
 from netwatch.platform import get_backend
 from netwatch.platform.base import normalize_mac_address as normalize_platform_mac_address
 

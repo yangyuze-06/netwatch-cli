@@ -5,15 +5,15 @@ from __future__ import annotations
 from rich.prompt import Prompt
 from rich.table import Table
 
-from netwatch.device_location import DeviceLocationResult, run_browser_geolocation as _default_run_browser_geolocation
+from netwatch.location.geolocation.device import DeviceLocationResult, run_browser_geolocation as _default_run_browser_geolocation
 from netwatch.location.models import PreciseLocationReport
 from netwatch.location.precise_location import run_precise_location_report as _default_run_precise_location_report
-from netwatch.network_info import (
+from netwatch.network.info import (
     get_display_network_interfaces as _default_get_display_network_interfaces,
     get_preferred_physical_interface as _default_get_preferred_physical_interface,
 )
-from netwatch.proxy_probe import probe_exit_ip as _default_probe_exit_ip
-from netwatch.router import get_default_gateway as _default_get_default_gateway
+from netwatch.network.proxy_probe import probe_exit_ip as _default_probe_exit_ip
+from netwatch.network.router import get_default_gateway as _default_get_default_gateway
 from netwatch.cli_modules.common import cli_override, console
 
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from netwatch.config import (
+from netwatch.core.config import (
     clear_preferred_librespeed,
     clear_preferred_speedtest,
     get_preferred_librespeed,

@@ -13,7 +13,7 @@ import requests
 
 from netwatch.platform import get_backend
 from netwatch.platform.base import is_virtual_gateway_address
-from netwatch.scanner import HostScanResult
+from netwatch.network.scanner import HostScanResult
 
 
 @dataclass(frozen=True)

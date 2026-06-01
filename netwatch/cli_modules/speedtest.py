@@ -15,7 +15,7 @@ from netwatch.speedtest.analysis import (
     detect_vpn_tun,
     get_result_confidence,
 )
-from netwatch.config import (
+from netwatch.core.config import (
     clear_preferred_librespeed,
     clear_preferred_speedtest,
     get_config_path,
@@ -24,8 +24,8 @@ from netwatch.config import (
     save_preferred_speedtest,
     set_preferred_librespeed,
 )
-from netwatch.network_info import get_preferred_physical_interface as _default_get_preferred_physical_interface
-from netwatch.proxy_probe import probe_exit_ip as _default_probe_exit_ip
+from netwatch.network.info import get_preferred_physical_interface as _default_get_preferred_physical_interface
+from netwatch.network.proxy_probe import probe_exit_ip as _default_probe_exit_ip
 from netwatch.speedtest.speedtest_cn import SpeedtestCnResult, is_valid_speedtest_cn_label
 from netwatch.speedtest.backends.ookla_cli import get_install_hint as get_ookla_install_hint
 from netwatch.speedtest.speedtest_cn_browser import (

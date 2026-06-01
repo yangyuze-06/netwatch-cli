@@ -1,8 +1,8 @@
 import ipaddress
 import unittest
 
-import netwatch.scanner as scanner
-from netwatch.scanner import normalize_mac_address, parse_arp_output
+import netwatch.network.scanner as scanner
+from netwatch.network.scanner import normalize_mac_address, parse_arp_output
 
 
 class ArpParsingTest(unittest.TestCase):

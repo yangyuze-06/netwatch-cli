@@ -175,7 +175,7 @@ LibreSpeed CLI 是外部二进制，不由 `requirements.txt` 管理。未安装
 - 离线中国行政区划匹配完全在本地完成。
 - 实验性精确离线定位只把浏览器坐标回传到本机 `127.0.0.1` 临时服务，优先用本地边界 GeoJSON 判断行政区，失败时回退到中心点最近邻。
 - 高德/百度 API 不是默认依赖；默认运行不需要地图服务 Key。
-- 配置文件 `~/.netwatch/config.json` 只保存非敏感偏好，不保存密码、`stok`、token、cookie 或公网 IP。
+- 配置文件保存在 `~/.netwatch` 下的 `config.json`，只保存非敏感偏好，不保存密码、`stok`、token、cookie 或公网 IP。
 
 ## 离线中国行政区划
 
@@ -206,7 +206,6 @@ python scripts/geo/download_guangzhou_boundary.py --probe-lat 23.1532 --probe-lo
 python scripts/geo/download_guangzhou_boundary.py --probe-lat 23.379859 --probe-lon 113.435329
 ```
 
-旧路径 `scripts/download_guangzhou_boundary.py` 暂时保留为兼容 wrapper；新命令请优先使用 `scripts/geo/`。
 真实 DataV GeoJSON 只应保存在用户本机，例如 `~/.netwatch/geo/guangzhou_districts.geojson`，不要提交到仓库。
 
 两个手动验证样例：
@@ -233,8 +232,6 @@ python scripts/geo/test_guangzhou_boundary_stress.py --boundary "$HOME/.netwatch
 python scripts/geo/test_guangzhou_boundary_stress.py --boundary "$HOME/.netwatch/geo/guangzhou_districts.geojson" --grid-regression
 ```
 
-旧路径 `scripts/test_guangzhou_boundary_stress.py` 暂时保留为兼容 wrapper。
-
 固定 regression 点来自 `tests/fixtures/location/guangzhou_probe_points.csv`：
 
 - `school_baiyun` 应命中 `白云区` / `440111`。
@@ -248,14 +245,36 @@ WGS84/GCJ-02 偏移和 DataV/高德边界数据版本影响；`boundary proximit
 
 - `netwatch/location/admin`: 行政边界、区县中心点查询、坐标转换和边界 stress helpers。
 - `netwatch/location/roads`: 附近道路实验能力。
+- `netwatch/core`: shared config、banner。
+- `netwatch/network`: network discovery、router、proxy logic。
+- `netwatch/location`: geolocation、admin boundary、geo data logic。
+- `netwatch/speedtest`: speedtest runners and backends。
+- `netwatch/platform`: macOS / Linux / Windows 平台差异适配。
+- `netwatch/cli_modules`: interactive menu/UI adapters only，应保持 thin，只做输入、展示和调度。
 - `scripts/geo`: 地理数据下载、验证和压力测试工具。
 - `tests/location`: location 子系统测试。
 - `tests/speedtest`: speedtest 子系统测试。
 - `tests/network`: scanner、router、proxy 和平台网络测试。
+- `tests/core`、`tests/compat`: core 测试与 canonical import smoke tests。
 
-TODO: speedtest 仍保留新 package 与旧兼容模块并存，包括 `netwatch/speedtest/`、
-`netwatch/speedtest_backends/`、`netwatch/speedtest_cn.py`、`netwatch/speedtest_cn_browser.py`、
-`netwatch/speedtest_runner.py` 和 `netwatch/speed.py`。后续应单独整理，避免本轮结构调整扩大风险。
+真实实现应放在 `netwatch/core/`、`netwatch/network/`、`netwatch/location/`、
+`netwatch/speedtest/` 这些 canonical packages 下。当前项目使用 clean package mode，
+旧顶层 Python import API 不保证兼容。
+
+`__init__.py` 是有意保留的 Python package marker，不要改名为 `init.py` 或删除。
+`__pycache__` 是 Python 生成的缓存目录，应忽略或清理。
+
+检查 CLI 层边界：
+
+```bash
+.venv/bin/python scripts/dev/check_cli_boundaries.py
+```
+
+查看项目树时建议过滤生成物：
+
+```bash
+tree -I '__pycache__|*.pyc|.pytest_cache|.venv|*.egg-info|dist|build|.DS_Store'
+```
 
 仓库只内置很小的 sample boundary/roads 数据用于测试和演示，不提交大型全国边界或 OSM 数据。
 正式 CLI 运行默认不会把 sample 当作真实定位结果；如需演示 sample，可显式设置
@@ -281,9 +300,24 @@ python scripts/geo/build_china_district_centers.py
 
 ```bash
 source .venv/bin/activate
+
+# 重建区县中心点数据
 python scripts/geo/build_china_district_centers.py
+
+# 清理缓存与生成物
+python scripts/dev/clean_caches.py --dry-run   # 预览
+python scripts/dev/clean_caches.py              # 实际清理
+
+# 查看干净的项目树
+tree -I '__pycache__|*.pyc|.pytest_cache|.venv|*.egg-info|dist|build|.DS_Store'
+
+# 编译检查
 python -m compileall netwatch
+
+# 运行测试
 pytest -q
+
+# 检查空白差异
 git diff --check
 ```
 
@@ -299,23 +333,25 @@ netwatch-cli/
 │   │   ├── router.py             路由器相关 CLI 展示与交互
 │   │   ├── lan.py                局域网扫描相关 CLI 展示与交互
 │   │   └── location.py           定位相关 CLI 展示与交互
-│   ├── config.py                 用户配置读写
-│   ├── network_info.py           本机网络和网卡识别
-│   ├── proxy_probe.py            当前公网出口检测
-│   ├── device_location.py        浏览器授权定位
+│   ├── core/                     全局配置、banner
+│   ├── network/                  本机网络、扫描、路由器、代理探测
 │   ├── location/                 定位与离线行政区划
+│   │   ├── geolocation/          浏览器授权定位
 │   │   ├── admin/                行政边界、中心点、坐标转换
 │   │   ├── roads/                附近道路实验能力
 │   │   └── data/                 轻量内置数据
-│   └── speedtest/                测速领域模块
-│       ├── analysis.py           测速结果一致性和路径分析
-│       ├── runner.py             测速调度与诊断
-│       ├── speed.py              实时网卡流量采样
-│       ├── speedtest_cn*.py      speedtest.cn browser automation
-│       └── backends/             Ookla / LibreSpeed / Python 测速后端
+│   ├── speedtest/                测速领域模块
+│   │   ├── analysis.py           测速结果一致性和路径分析
+│   │   ├── runner.py             测速调度与诊断
+│   │   ├── speed.py              实时网卡流量采样
+│   │   ├── speedtest_cn*.py      speedtest.cn browser automation
+│   │   └── backends/             Ookla / LibreSpeed / Python 测速后端
 ├── scripts/
+│   ├── dev/                      开发者工具（缓存清理、边界检查）
 │   └── geo/                      地理数据下载、验证、压力测试脚本
 ├── tests/
+│   ├── core/                     core 测试
+│   ├── compat/                   canonical import smoke tests
 │   ├── location/                 location 子系统测试
 │   ├── network/                  scanner/router/proxy/platform 测试
 │   └── speedtest/                speedtest 子系统测试
@@ -325,7 +361,7 @@ netwatch-cli/
     └── features/                 专项功能设计文档
 ```
 
-项目保持当前包布局，不迁移到 `src/`。测速相关目录仍有新旧兼容模块并存，后续单独整理。
+项目保持当前包布局，不迁移到 `src/`。代码实现以 canonical packages 为准，旧顶层 Python import API 不保证兼容。
 
 ## 数据与许可证
 

@@ -2,8 +2,8 @@ import io
 
 from rich.console import Console
 
-from netwatch.cli_modules import banner as banner_mod
-from netwatch.cli_modules.banner import (
+from netwatch.core import banner as banner_mod
+from netwatch.core.banner import (
     LOGO_LINES,
     play_startup_animation,
     print_banner,

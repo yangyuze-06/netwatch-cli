@@ -1,7 +1,7 @@
 import subprocess
 
-from netwatch.proxy_probe import parse_ipinfo_json, probe_exit_ip
-from netwatch import proxy_probe
+from netwatch.network.proxy_probe import parse_ipinfo_json, probe_exit_ip
+from netwatch.network import proxy_probe
 
 
 def test_probe_exit_ip_parses_ipinfo_json() -> None:

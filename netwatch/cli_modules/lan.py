@@ -6,15 +6,15 @@ from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
-from netwatch.network_info import NetworkCandidate, get_lan_scan_candidates
-from netwatch.router import (
+from netwatch.network.info import NetworkCandidate, get_lan_scan_candidates
+from netwatch.network.router import (
     NetworkDevice,
     RouterDevice,
     merge_devices,
     router_devices_to_network_devices,
     scan_results_to_network_devices,
 )
-from netwatch.scanner import scan_network
+from netwatch.network.scanner import scan_network
 from netwatch.cli_modules.common import console
 from netwatch.cli_modules.router import prompt_and_fetch_xiaomi_router_devices
 

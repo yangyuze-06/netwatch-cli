@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from netwatch.device_location import DeviceLocationResult
+from netwatch.location.geolocation.device import DeviceLocationResult
 from netwatch.location.models import AdminLocationResult, BrowserLocationResult, PreciseLocationReport
 from netwatch.location.admin.offline_boundary import (
     BoundaryDependencyError,
@@ -126,9 +126,11 @@ def test_precise_report_without_config_does_not_use_sample_boundary(monkeypatch)
     monkeypatch.delenv("NETWATCH_BOUNDARY_GEOJSON", raising=False)
     monkeypatch.delenv("NETWATCH_ROADS_GEOJSON", raising=False)
     monkeypatch.delenv("NETWATCH_USE_SAMPLE_GEO", raising=False)
+    # Force boundary loading to fail so the fallback path is exercised directly,
+    # regardless of whether shapely is installed.
     monkeypatch.setattr(
-        "netwatch.location.admin.offline_boundary.DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON",
-        Path("/tmp/netwatch-test-missing-guangzhou-boundary.geojson"),
+        "netwatch.location.precise_location.load_boundary_dataset",
+        lambda path=None: (_ for _ in ()).throw(BoundaryDependencyError("shapely not available for test")),
     )
     device = DeviceLocationResult(latitude=23.153126, longitude=113.581404, accuracy_m=30.0)
 
@@ -140,7 +142,9 @@ def test_precise_report_without_config_does_not_use_sample_boundary(monkeypatch)
     assert report.admin.source == "offline_china_district_centers"
     assert report.fallback_used is True
     assert report.nearby_roads == []
-    assert any("NETWATCH_BOUNDARY_GEOJSON" in warning for warning in report.warnings)
+    assert any(
+        "precise boundary unavailable" in warning for warning in report.warnings
+    ), f"Expected boundary-unavailable warning, got: {report.warnings}"
     assert any("NETWATCH_ROADS_GEOJSON" in warning for warning in report.warnings)
 
 

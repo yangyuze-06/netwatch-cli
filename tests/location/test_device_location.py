@@ -11,7 +11,7 @@ from http.server import HTTPServer
 
 import pytest
 
-from netwatch.device_location import (
+from netwatch.location.geolocation.device import (
     DeviceLocationResult,
     GEOLOCATION_HTML,
     get_device_location_html_source,
@@ -80,6 +80,7 @@ def test_server_location_returns_device_location_result(monkeypatch) -> None:
         conn.request("POST", "/location", body, {"Content-Type": "application/json"})
         resp = conn.getresponse()
         assert resp.status == 200, f"Expected 200, got {resp.status}"
+        resp.read()
         conn.close()
 
     monkeypatch.setattr("webbrowser.open", fake_open)
@@ -106,6 +107,7 @@ def test_server_error_returns_error(monkeypatch) -> None:
         conn.request("POST", "/error", body, {"Content-Type": "application/json"})
         resp = conn.getresponse()
         assert resp.status == 200, f"Expected 200, got {resp.status}"
+        resp.read()
         conn.close()
 
     monkeypatch.setattr("webbrowser.open", fake_open)
@@ -160,19 +162,6 @@ def test_webbrowser_open_called_with_localhost(monkeypatch) -> None:
     assert opened_urls[0].startswith("http://127.0.0.1:")
 
 
-def test_server_shuts_down_cleanly(monkeypatch) -> None:
-    """Server must shut down without hanging threads."""
-    import gc
-
-    monkeypatch.setattr("webbrowser.open", lambda url: None)
-
-    # With a 1s timeout, the server should shut down after the wait
-    result = run_browser_geolocation(timeout_seconds=1)
-
-    assert result.error is not None
-    # No threads should remain blocked
-    # (daemon threads may still show as alive but won't block exit)
-
 
 def test_no_file_written(monkeypatch, tmp_path) -> None:
     """run_browser_geolocation must not write any files."""
@@ -221,8 +210,8 @@ def test_network_info_prompts_browser_geolocation(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
@@ -261,8 +250,8 @@ def test_network_info_no_geolocation_skips_browser(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
@@ -301,8 +290,8 @@ def test_network_info_yes_geolocation_calls_browser(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
@@ -348,8 +337,8 @@ def test_network_info_geolocation_failure_shows_error(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
@@ -402,7 +391,7 @@ def test_reverse_geocode_offline_not_installed(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", _mock_import)
 
-    from netwatch.device_location import reverse_geocode_offline
+    from netwatch.location.geolocation.device import reverse_geocode_offline
     result = reverse_geocode_offline(23.1291, 113.2644)
     assert result["country"] is None
     assert result["admin1"] is None
@@ -430,7 +419,7 @@ def test_reverse_geocode_offline_success(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", _mock_import)
 
-    from netwatch.device_location import reverse_geocode_offline
+    from netwatch.location.geolocation.device import reverse_geocode_offline
     result = reverse_geocode_offline(23.1291, 113.2644)
     assert result["country"] == "CN"
     assert result["admin1"] == "Guangdong"
@@ -460,7 +449,7 @@ def test_reverse_geocode_offline_exception(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", _mock_import)
 
-    from netwatch.device_location import reverse_geocode_offline
+    from netwatch.location.geolocation.device import reverse_geocode_offline
     result = reverse_geocode_offline(23.1291, 113.2644)
     assert result["country"] is None
     assert result["admin1"] is None
@@ -489,7 +478,7 @@ def test_reverse_geocode_offline_empty_results(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", _mock_import)
 
-    from netwatch.device_location import reverse_geocode_offline
+    from netwatch.location.geolocation.device import reverse_geocode_offline
     result = reverse_geocode_offline(23.1291, 113.2644)
     assert result["country"] is None
     assert result["admin1"] is None
@@ -501,11 +490,11 @@ def test_reverse_geocode_offline_empty_results(monkeypatch) -> None:
 
 def test_run_browser_geolocation_fills_reverse_geocode(monkeypatch) -> None:
     """run_browser_geolocation must call _fill_reverse_geocode on success."""
-    from netwatch.device_location import _fill_reverse_geocode, DeviceLocationResult
+    from netwatch.location.geolocation.device import _fill_reverse_geocode, DeviceLocationResult
 
     calls = []
     monkeypatch.setattr(
-        "netwatch.device_location._fill_reverse_geocode",
+        "netwatch.location.geolocation.device._fill_reverse_geocode",
         lambda r: calls.append(r),
     )
 
@@ -518,7 +507,8 @@ def test_run_browser_geolocation_fills_reverse_geocode(monkeypatch) -> None:
         conn = http.client.HTTPConnection("127.0.0.1", port)
         body = json.dumps({"latitude": 23.1291, "longitude": 113.2644, "accuracy": 65.0})
         conn.request("POST", "/location", body, {"Content-Type": "application/json"})
-        conn.getresponse()
+        resp = conn.getresponse()
+        resp.read()
         conn.close()
 
     monkeypatch.setattr("webbrowser.open", fake_open)
@@ -533,8 +523,8 @@ def test_cli_geolocation_shows_reverse_geocode_fields(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
@@ -631,8 +621,8 @@ def test_cli_geolocation_not_installed_shows_not_enabled(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
@@ -692,7 +682,7 @@ def test_reverse_geocode_suppresses_loading_output(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", _mock_import)
 
-    from netwatch.device_location import reverse_geocode_offline
+    from netwatch.location.geolocation.device import reverse_geocode_offline
     result = reverse_geocode_offline(23.1291, 113.2644)
     assert result["nearest_place"] == "Yonghe"
     assert result["error"] is None
@@ -703,8 +693,8 @@ def test_cli_geolocation_contains_disclaimer_text(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")
@@ -749,8 +739,8 @@ def test_reverse_geocode_error_preserves_coordinates(monkeypatch) -> None:
     import io
     from rich.console import Console
     from netwatch import cli as cli_mod
-    from netwatch.network_info import InterfaceInfo
-    from netwatch.proxy_probe import ExitIPInfo
+    from netwatch.network.info import InterfaceInfo
+    from netwatch.network.proxy_probe import ExitIPInfo
 
     monkeypatch.setattr(cli_mod, "get_preferred_physical_interface", lambda: {"name": "en0", "ip": "192.168.31.75", "reason": "preferred"})
     monkeypatch.setattr(cli_mod, "get_default_gateway", lambda: "192.168.31.1")

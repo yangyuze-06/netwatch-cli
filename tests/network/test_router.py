@@ -1,4 +1,4 @@
-from netwatch.router import (
+from netwatch.network.router import (
     NetworkDevice,
     RouterDevice,
     deduplicate_router_devices,
@@ -8,7 +8,7 @@ from netwatch.router import (
     normalize_xiaomi_device,
     parse_macos_default_gateway,
 )
-import netwatch.router as router
+import netwatch.network.router as router
 
 
 def test_xiaomi_redmi_stok_missing_guidance_for_generic_luci_url(monkeypatch, capsys) -> None:
