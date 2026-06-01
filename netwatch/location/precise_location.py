@@ -88,6 +88,7 @@ def _fill_admin_result(
             )
         admin = _locate_with_coord_system(lat, lon, dataset, selected_coord_system, report.warnings)
         if admin is not None:
+            _append_admin_boundary_warnings(report, admin)
             report.admin = admin
             return
         report.warnings.append("precise boundary did not contain this point; falling back to nearest district center")
@@ -133,6 +134,18 @@ def _fill_nearby_roads(report: PreciseLocationReport, *, roads_path: str | None 
             report.warnings.append("nearby street unavailable: no offline road matched within 300 m")
     except (RoadsDependencyError, FileNotFoundError, ValueError, OSError) as exc:
         report.warnings.append(f"nearby street unavailable: {exc}")
+
+
+def _append_admin_boundary_warnings(report: PreciseLocationReport, admin: AdminLocationResult) -> None:
+    for warning in admin.boundary_warnings:
+        report.warnings.append(warning)
+    if (
+        report.browser is not None
+        and report.browser.accuracy_m is not None
+        and admin.boundary_distance_m is not None
+        and report.browser.accuracy_m > admin.boundary_distance_m
+    ):
+        report.warnings.append("browser accuracy radius overlaps district boundary")
 
 
 def _get_boundary_coord_system(explicit: BoundaryCoordSystem | None = None) -> BoundaryCoordSystem:

@@ -218,6 +218,27 @@ DataV/Amap 边界数据的 GCJ-02 转换结果；如果两者命中不同区县�
 区县级边界只能识别到白云区、花都区、增城区、黄埔区等行政区，不能识别永宁街道、学校名称或凤凰城凤雅苑。
 附近地标未来应使用用户本机 `user_landmarks.json` 这类小型自定义数据解决，不下载全国 POI、全国道路或门牌级数据库。
 
+### 地点/边界测试
+
+真人拿着设备移动只能发现个别现象，不能系统验证边界算法。广州边界测试使用固定 probe points、
+区内 representative points、边界 vertex/midpoint 和边界附近 epsilon offsets 来检查算法是否稳定。
+
+运行本地广州区县边界 stress test：
+
+```bash
+python scripts/test_guangzhou_boundary_stress.py --boundary "$HOME/.netwatch/geo/guangzhou_districts.geojson"
+python scripts/test_guangzhou_boundary_stress.py --boundary "$HOME/.netwatch/geo/guangzhou_districts.geojson" --grid-regression
+```
+
+固定 regression 点来自 `tests/fixtures/location/guangzhou_probe_points.csv`：
+
+- `school_baiyun` 应命中 `白云区` / `440111`。
+- `zengcheng_fenghuangcheng` 应命中 `增城区` / `440118`。
+
+stress test 还会比较 WGS84 与 GCJ-02 probe。区界附近结果可能受浏览器 `accuracy_m`、
+WGS84/GCJ-02 偏移和 DataV/高德边界数据版本影响；`boundary proximity warning` 不一定代表 bug，
+但需要在输出中解释。中心点最近邻只是 fallback，不能作为边界附近真值。
+
 仓库只内置很小的 sample boundary/roads 数据用于测试和演示，不提交大型全国边界或 OSM 数据。
 正式 CLI 运行默认不会把 sample 当作真实定位结果；如需演示 sample，可显式设置
 `NETWATCH_USE_SAMPLE_GEO=1`，输出会标注 sample/demo。CLI 只显示“附近道路/街道”，不会声称是精确门牌地址。

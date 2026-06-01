@@ -1,0 +1,25 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "广州市",
+        "adcode": "440100",
+        "level": "city"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [112.90, 22.50],
+            [114.10, 22.50],
+            [114.10, 24.00],
+            [112.90, 24.00],
+            [112.90, 22.50]
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -141,7 +142,20 @@ def locate_admin_by_point(
         return None
 
     _, best = min(matches, key=lambda item: (_level_rank(item[1].properties), item[0]))
-    return _admin_result_from_properties(best.properties, dataset.source, is_sample=dataset.is_sample)
+    result = _admin_result_from_properties(best.properties, dataset.source, is_sample=dataset.is_sample)
+    result.boundary_match_count = len(matches)
+    if len(matches) > 1:
+        result.boundary_warnings.append("multiple administrative polygons cover this point")
+        if result.confidence == "high":
+            result.confidence = "ambiguous_boundary"
+
+    distance_m = _distance_to_boundary_m(point, best.geometry)
+    result.boundary_distance_m = distance_m
+    if distance_m is not None and distance_m < 100.0:
+        result.boundary_warnings.append(
+            "point is close to district boundary; coordinate system or browser accuracy may affect result"
+        )
+    return result
 
 
 def _level_rank(props: dict[str, Any]) -> int:
@@ -200,3 +214,22 @@ def _first_text(props: dict[str, Any], *keys: str) -> str | None:
         if text:
             return text
     return None
+
+
+def _distance_to_boundary_m(point: Any, geometry: Any) -> float | None:
+    try:
+        from shapely.ops import nearest_points
+    except ImportError:
+        return None
+    try:
+        nearest = nearest_points(point, geometry.boundary)[1]
+    except Exception:
+        return None
+    return _approx_distance_m(point.y, point.x, nearest.y, nearest.x)
+
+
+def _approx_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    avg_lat = math.radians((lat1 + lat2) / 2.0)
+    dy = (lat1 - lat2) * 111320.0
+    dx = (lon1 - lon2) * 111320.0 * math.cos(avg_lat)
+    return math.hypot(dx, dy)

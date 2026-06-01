@@ -61,6 +61,7 @@ class BoundaryProbeSingleResult:
     matched: bool
     admin: AdminLocationResult | None = None
     raw_properties: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
     error: str | None = None
 
 
@@ -152,6 +153,10 @@ def validate_boundary_geojson(path: str | Path) -> BoundaryValidationResult:
         result.warnings.append("properties do not expose a recognizable name field")
     if not ({"adcode", "code"} & set(result.property_field_coverage)):
         result.warnings.append("properties do not expose a recognizable adcode/code field")
+    if result.feature_count == 1:
+        result.warnings.append(
+            "boundary appears to contain one whole-city polygon, not Guangzhou child district boundaries"
+        )
 
     missing_names = GUANGZHOU_EXPECTED_NAMES - names
     if missing_names:
@@ -184,10 +189,12 @@ def probe_boundary(
 
     if coord_system == "wgs84":
         result.chosen = _probe_single(dataset, lat, lon, "wgs84")
+        result.warnings.extend(result.chosen.warnings)
         return result
     if coord_system == "gcj02":
         query_lat, query_lon = wgs84_to_gcj02(lat, lon)
         result.chosen = _probe_single(dataset, query_lat, query_lon, "gcj02")
+        result.warnings.extend(result.chosen.warnings)
         return result
     if coord_system != "auto":
         raise ValueError(f"unsupported boundary coordinate system: {coord_system}")
@@ -203,6 +210,9 @@ def probe_boundary(
         )
     else:
         result.warnings.append("auto mode used GCJ-02 conversion for DataV/Amap-style boundary data")
+    for single in (result.wgs84_result, result.gcj02_result):
+        if single is not None:
+            result.warnings.extend(single.warnings)
     return result
 
 
@@ -224,6 +234,7 @@ def summarize_properties(props: dict[str, Any], *, limit: int = 10) -> dict[str,
 def _probe_single(dataset: Any, lat: float, lon: float, coord_system: str) -> BoundaryProbeSingleResult:
     admin = locate_admin_by_point(lat, lon, dataset)
     props = getattr(admin, "raw_properties", None) if admin is not None else None
+    warnings = getattr(admin, "boundary_warnings", []) if admin is not None else []
     return BoundaryProbeSingleResult(
         coord_system=coord_system,
         query_latitude=lat,
@@ -231,6 +242,7 @@ def _probe_single(dataset: Any, lat: float, lon: float, coord_system: str) -> Bo
         matched=admin is not None,
         admin=admin,
         raw_properties=summarize_properties(props) if isinstance(props, dict) else {},
+        warnings=list(warnings),
     )
 
 

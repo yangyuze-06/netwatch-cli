@@ -1,0 +1,3 @@
+label,lat,lon,expected_district,expected_adcode,case_type,notes
+school_baiyun,23.379859,113.435329,白云区,440111,known_regression,用户学校附近；中心点曾误判花都区
+zengcheng_fenghuangcheng,23.1532,113.5813,增城区,440118,known_regression,凤凰城/永宁附近；中心点曾误判黄埔区

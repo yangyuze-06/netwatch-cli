@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -33,10 +34,13 @@ class AdminLocationResult:
     source: str = "unknown"
     raw_name: str | None = None
     distance_km: float | None = None
-    raw_properties: dict[str, object] | None = None
+    raw_properties: dict[str, Any] | None = None
     boundary_coord_system: str | None = None
     boundary_query_latitude: float | None = None
     boundary_query_longitude: float | None = None
+    boundary_distance_m: float | None = None
+    boundary_match_count: int = 0
+    boundary_warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
