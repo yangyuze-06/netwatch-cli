@@ -13,6 +13,7 @@ from netwatch.location.models import AdminLocationResult
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 DEFAULT_BOUNDARY_GEOJSON = DATA_DIR / "boundaries" / "china_districts.sample.geojson"
+DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON = Path.home() / ".netwatch" / "geo" / "guangzhou_districts.geojson"
 BOUNDARY_ENV_VAR = "NETWATCH_BOUNDARY_GEOJSON"
 USE_SAMPLE_GEO_ENV_VAR = "NETWATCH_USE_SAMPLE_GEO"
 
@@ -49,15 +50,22 @@ def get_boundary_geojson_path(path: str | os.PathLike[str] | None = None) -> Pat
         return Path(configured).expanduser()
     if _use_sample_geo():
         return DEFAULT_BOUNDARY_GEOJSON
+    if DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON.exists():
+        return DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON
     return DEFAULT_BOUNDARY_GEOJSON
 
 
 def load_boundary_dataset(path: str | os.PathLike[str] | None = None) -> BoundaryDataset:
     """Load a Polygon/MultiPolygon GeoJSON FeatureCollection into an STRtree."""
-    if path is None and not os.environ.get(BOUNDARY_ENV_VAR) and not _use_sample_geo():
+    if (
+        path is None
+        and not os.environ.get(BOUNDARY_ENV_VAR)
+        and not DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON.exists()
+        and not _use_sample_geo()
+    ):
         raise FileNotFoundError(
             "boundary GeoJSON not configured; set NETWATCH_BOUNDARY_GEOJSON for real data "
-            "or NETWATCH_USE_SAMPLE_GEO=1 for demo sample data"
+            f"or run scripts/download_guangzhou_boundary.py --force to create {DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON}"
         )
 
     try:
@@ -156,19 +164,26 @@ def _admin_result_from_properties(props: dict[str, Any], source: str, *, is_samp
     raw_name = _first_text(props, "fullname", "full_name", "name")
     district = _first_text(props, "district", "county")
     name = _first_text(props, "name")
+    adcode = _first_text(props, "adcode", "code")
+    province = _first_text(props, "province")
+    city = _first_text(props, "city")
     level = str(props.get("level") or "").lower()
     if not district and level in {"district", "county"}:
         district = name
+    if adcode and adcode.startswith("4401"):
+        province = province or "广东省"
+        city = city or "广州市"
 
     return AdminLocationResult(
         country=_first_text(props, "country") or "CN",
-        province=_first_text(props, "province"),
-        city=_first_text(props, "city"),
+        province=province,
+        city=city,
         district=district,
-        adcode=_first_text(props, "adcode", "code"),
+        adcode=adcode,
         confidence="sample_only" if is_sample else "high",
         source=source,
         raw_name=raw_name,
+        raw_properties=dict(props),
     )
 
 

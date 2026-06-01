@@ -33,6 +33,10 @@ class AdminLocationResult:
     source: str = "unknown"
     raw_name: str | None = None
     distance_km: float | None = None
+    raw_properties: dict[str, object] | None = None
+    boundary_coord_system: str | None = None
+    boundary_query_latitude: float | None = None
+    boundary_query_longitude: float | None = None
 
 
 @dataclass

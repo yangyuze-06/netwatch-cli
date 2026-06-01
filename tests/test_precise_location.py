@@ -12,6 +12,7 @@ from netwatch.device_location import DeviceLocationResult
 from netwatch.location.models import AdminLocationResult, BrowserLocationResult, PreciseLocationReport
 from netwatch.location.offline_boundary import (
     BoundaryDependencyError,
+    DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON,
     DEFAULT_BOUNDARY_GEOJSON,
     get_boundary_geojson_path,
     load_boundary_dataset,
@@ -125,6 +126,10 @@ def test_precise_report_without_config_does_not_use_sample_boundary(monkeypatch)
     monkeypatch.delenv("NETWATCH_BOUNDARY_GEOJSON", raising=False)
     monkeypatch.delenv("NETWATCH_ROADS_GEOJSON", raising=False)
     monkeypatch.delenv("NETWATCH_USE_SAMPLE_GEO", raising=False)
+    monkeypatch.setattr(
+        "netwatch.location.offline_boundary.DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON",
+        Path("/tmp/netwatch-test-missing-guangzhou-boundary.geojson"),
+    )
     device = DeviceLocationResult(latitude=23.153126, longitude=113.581404, accuracy_m=30.0)
 
     report = build_precise_location_report(device)
@@ -137,6 +142,13 @@ def test_precise_report_without_config_does_not_use_sample_boundary(monkeypatch)
     assert report.nearby_roads == []
     assert any("NETWATCH_BOUNDARY_GEOJSON" in warning for warning in report.warnings)
     assert any("NETWATCH_ROADS_GEOJSON" in warning for warning in report.warnings)
+
+
+def test_default_guangzhou_boundary_path_used_when_present(monkeypatch) -> None:
+    monkeypatch.delenv("NETWATCH_BOUNDARY_GEOJSON", raising=False)
+    monkeypatch.delenv("NETWATCH_USE_SAMPLE_GEO", raising=False)
+
+    assert get_boundary_geojson_path() in {DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON, DEFAULT_BOUNDARY_GEOJSON}
 
 
 @pytest.mark.skipif(not HAS_SHAPELY, reason="shapely not installed")
@@ -175,6 +187,63 @@ def test_precise_report_falls_back_when_boundary_unavailable(monkeypatch, tmp_pa
     assert report.admin.confidence == "medium"
     assert any("precise boundary unavailable" in warning for warning in report.warnings)
     assert any("nearby street unavailable" in warning for warning in report.warnings)
+
+
+@pytest.mark.skipif(not HAS_SHAPELY, reason="shapely not installed")
+def test_precise_report_auto_boundary_coord_system_prefers_gcj02(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("NETWATCH_USE_SAMPLE_GEO", raising=False)
+    monkeypatch.setenv("NETWATCH_BOUNDARY_COORD_SYSTEM", "auto")
+    boundary = tmp_path / "boundary.geojson"
+    boundary.write_text(
+        """{
+          "type": "FeatureCollection",
+          "features": [
+            {
+              "type": "Feature",
+              "properties": {
+                "province": "广东省",
+                "city": "广州市",
+                "district": "花都区",
+                "name": "花都区",
+                "adcode": "440114",
+                "level": "district"
+              },
+              "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[113.42, 23.36], [113.438, 23.36], [113.438, 23.40], [113.42, 23.40], [113.42, 23.36]]]
+              }
+            },
+            {
+              "type": "Feature",
+              "properties": {
+                "province": "广东省",
+                "city": "广州市",
+                "district": "白云区",
+                "name": "白云区",
+                "adcode": "440111",
+                "level": "district"
+              },
+              "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[113.438, 23.36], [113.46, 23.36], [113.46, 23.40], [113.438, 23.40], [113.438, 23.36]]]
+              }
+            }
+          ]
+        }""",
+        encoding="utf-8",
+    )
+    device = DeviceLocationResult(latitude=23.379859, longitude=113.435329, accuracy_m=30.0)
+
+    report = build_precise_location_report(device, boundary_path=str(boundary))
+
+    assert report.admin is not None
+    assert report.admin.district == "白云区"
+    assert report.admin.adcode == "440111"
+    assert report.admin.source == "offline_boundary"
+    assert report.admin.confidence == "high_with_coord_transform"
+    assert report.admin.boundary_coord_system == "gcj02"
+    assert any("coordinate system ambiguity" in warning for warning in report.warnings)
+    assert any("GCJ-02 conversion" in warning for warning in report.warnings)
 
 
 def test_precise_report_browser_error_returns_warning() -> None:

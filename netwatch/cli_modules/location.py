@@ -244,6 +244,11 @@ def print_precise_location_report(report: PreciseLocationReport) -> None:
         admin_table.add_row("District", f"{sample_prefix}{district}" if district else "-")
         admin_table.add_row("Adcode", report.admin.adcode or "-")
         admin_table.add_row("Confidence", report.admin.confidence)
+        if report.admin.boundary_coord_system:
+            label = report.admin.boundary_coord_system
+            if label == "gcj02":
+                label = "GCJ-02 converted from browser WGS84"
+            admin_table.add_row("Boundary query", label)
         if report.admin.distance_km is not None:
             admin_table.add_row("Distance to district center", f"{report.admin.distance_km:.1f} km")
         admin_table.add_row("Source", report.admin.source)
@@ -275,5 +280,4 @@ def print_precise_location_report(report: PreciseLocationReport) -> None:
 
     console.print("[dim]Privacy: This location was processed locally only. Nothing was uploaded.[/dim]")
     console.print("[dim]附近道路/街道不是精确门牌地址。[/dim]")
-
 

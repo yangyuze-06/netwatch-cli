@@ -191,10 +191,32 @@ LibreSpeed CLI 是外部二进制，不由 `requirements.txt` 管理。未安装
 
 ```bash
 python -m pip install -e ".[geo]"
-export NETWATCH_BOUNDARY_GEOJSON=/path/to/real_boundary.geojson
+python scripts/download_guangzhou_boundary.py --force
+export NETWATCH_BOUNDARY_GEOJSON="$HOME/.netwatch/geo/guangzhou_districts.geojson"
+export NETWATCH_BOUNDARY_COORD_SYSTEM=auto
 export NETWATCH_ROADS_GEOJSON=/path/to/real_roads.geojson
 netwatch
 ```
+
+推荐只下载广州市区县级边界到 `~/.netwatch/geo/guangzhou_districts.geojson`：
+
+```bash
+python scripts/download_guangzhou_boundary.py --force
+python scripts/download_guangzhou_boundary.py --probe-lat 23.1532 --probe-lon 113.5813
+python scripts/download_guangzhou_boundary.py --probe-lat 23.379859 --probe-lon 113.435329
+```
+
+两个手动验证样例：
+
+- 增城/永宁/凤凰城测试点：`lat=23.1532`、`lon=113.5813`，期望 `增城区` / `440118`。
+- 学校/白云区测试点：`lat=23.379859`、`lon=113.435329`，期望 `白云区` / `440111`。
+
+DataV/高德边界可能是 GCJ-02 坐标体系，而浏览器 Geolocation 通常返回 WGS84。
+`NETWATCH_BOUNDARY_COORD_SYSTEM=auto` 会同时比较 WGS84 和 GCJ-02 查询，并优先使用更符合
+DataV/Amap 边界数据的 GCJ-02 转换结果；如果两者命中不同区县，会输出坐标系歧义 warning。
+
+区县级边界只能识别到白云区、花都区、增城区、黄埔区等行政区，不能识别永宁街道、学校名称或凤凰城凤雅苑。
+附近地标未来应使用用户本机 `user_landmarks.json` 这类小型自定义数据解决，不下载全国 POI、全国道路或门牌级数据库。
 
 仓库只内置很小的 sample boundary/roads 数据用于测试和演示，不提交大型全国边界或 OSM 数据。
 正式 CLI 运行默认不会把 sample 当作真实定位结果；如需演示 sample，可显式设置

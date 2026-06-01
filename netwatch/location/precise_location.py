@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+
+from netwatch.location.coord_transform import BoundaryCoordSystem, wgs84_to_gcj02
 from netwatch.device_location import DeviceLocationResult, run_browser_geolocation
 from netwatch.location.china_admin_lookup import lookup_nearest_district
 from netwatch.location.models import AdminLocationResult, BrowserLocationResult, PreciseLocationReport
@@ -17,11 +20,16 @@ from netwatch.location.offline_boundary import (
 )
 
 
+BOUNDARY_COORD_SYSTEM_ENV_VAR = "NETWATCH_BOUNDARY_COORD_SYSTEM"
+BOUNDARY_COORD_SYSTEMS: set[str] = {"auto", "wgs84", "gcj02"}
+
+
 def build_precise_location_report(
     device_result: DeviceLocationResult,
     *,
     boundary_path: str | None = None,
     roads_path: str | None = None,
+    boundary_coord_system: BoundaryCoordSystem | None = None,
 ) -> PreciseLocationReport:
     """Build an offline precise location report from browser coordinates."""
     report = PreciseLocationReport()
@@ -44,7 +52,7 @@ def build_precise_location_report(
         timestamp=device_result.timestamp,
     )
 
-    _fill_admin_result(report, boundary_path=boundary_path)
+    _fill_admin_result(report, boundary_path=boundary_path, coord_system=boundary_coord_system)
     _fill_nearby_roads(report, roads_path=roads_path)
     return report
 
@@ -60,19 +68,25 @@ def run_precise_location_report(timeout_seconds: int = 60) -> PreciseLocationRep
     return build_precise_location_report(device_result)
 
 
-def _fill_admin_result(report: PreciseLocationReport, *, boundary_path: str | None = None) -> None:
+def _fill_admin_result(
+    report: PreciseLocationReport,
+    *,
+    boundary_path: str | None = None,
+    coord_system: BoundaryCoordSystem | None = None,
+) -> None:
     assert report.browser is not None
     lat = report.browser.latitude
     lon = report.browser.longitude
 
     try:
         dataset = load_boundary_dataset(boundary_path)
+        selected_coord_system = _get_boundary_coord_system(coord_system)
         if dataset.is_sample:
             report.warnings.append(
                 "当前行政区结果来自内置测试样例，不代表真实行政边界。"
                 "请配置 NETWATCH_BOUNDARY_GEOJSON 后再使用精确行政区识别。"
             )
-        admin = locate_admin_by_point(lat, lon, dataset)
+        admin = _locate_with_coord_system(lat, lon, dataset, selected_coord_system, report.warnings)
         if admin is not None:
             report.admin = admin
             return
@@ -119,3 +133,66 @@ def _fill_nearby_roads(report: PreciseLocationReport, *, roads_path: str | None 
             report.warnings.append("nearby street unavailable: no offline road matched within 300 m")
     except (RoadsDependencyError, FileNotFoundError, ValueError, OSError) as exc:
         report.warnings.append(f"nearby street unavailable: {exc}")
+
+
+def _get_boundary_coord_system(explicit: BoundaryCoordSystem | None = None) -> BoundaryCoordSystem:
+    value = explicit or os.environ.get(BOUNDARY_COORD_SYSTEM_ENV_VAR) or "auto"
+    normalized = str(value).strip().lower()
+    if normalized not in BOUNDARY_COORD_SYSTEMS:
+        raise ValueError(
+            f"{BOUNDARY_COORD_SYSTEM_ENV_VAR} must be one of auto, wgs84, gcj02; got {value!r}"
+        )
+    return normalized  # type: ignore[return-value]
+
+
+def _locate_with_coord_system(
+    lat: float,
+    lon: float,
+    dataset: object,
+    coord_system: BoundaryCoordSystem,
+    warnings: list[str],
+) -> AdminLocationResult | None:
+    if coord_system == "wgs84":
+        admin = locate_admin_by_point(lat, lon, dataset)  # type: ignore[arg-type]
+        _annotate_boundary_query(admin, "wgs84", lat, lon)
+        return admin
+
+    gcj_lat, gcj_lon = wgs84_to_gcj02(lat, lon)
+    if coord_system == "gcj02":
+        admin = locate_admin_by_point(gcj_lat, gcj_lon, dataset)  # type: ignore[arg-type]
+        _annotate_boundary_query(admin, "gcj02", gcj_lat, gcj_lon)
+        _mark_coord_transform_confidence(admin)
+        warnings.append("boundary query used GCJ-02 conversion for DataV/Amap-style boundary data")
+        return admin
+
+    wgs84_admin = locate_admin_by_point(lat, lon, dataset)  # type: ignore[arg-type]
+    gcj02_admin = locate_admin_by_point(gcj_lat, gcj_lon, dataset)  # type: ignore[arg-type]
+    _annotate_boundary_query(wgs84_admin, "wgs84", lat, lon)
+    _annotate_boundary_query(gcj02_admin, "gcj02", gcj_lat, gcj_lon)
+    _mark_coord_transform_confidence(gcj02_admin)
+    warnings.append("boundary query used GCJ-02 conversion for DataV/Amap-style boundary data")
+    if _admin_identity(wgs84_admin) != _admin_identity(gcj02_admin):
+        warnings.append("coordinate system ambiguity: WGS84 and GCJ-02 boundary probes returned different results")
+    return gcj02_admin or wgs84_admin
+
+
+def _annotate_boundary_query(
+    admin: AdminLocationResult | None, coord_system: str, lat: float, lon: float
+) -> None:
+    if admin is None:
+        return
+    admin.boundary_coord_system = coord_system
+    admin.boundary_query_latitude = lat
+    admin.boundary_query_longitude = lon
+
+
+def _mark_coord_transform_confidence(admin: AdminLocationResult | None) -> None:
+    if admin is None or admin.confidence == "sample_only":
+        return
+    admin.confidence = "high_with_coord_transform"
+
+
+def _admin_identity(admin: AdminLocationResult | None) -> tuple[str | None, str | None] | None:
+    if admin is None:
+        return None
+    return admin.adcode, admin.district or admin.raw_name
