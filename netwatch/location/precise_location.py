@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import os
 
-from netwatch.location.coord_transform import BoundaryCoordSystem, wgs84_to_gcj02
+from netwatch.location.admin.coord_transform import BoundaryCoordSystem, wgs84_to_gcj02
 from netwatch.device_location import DeviceLocationResult, run_browser_geolocation
-from netwatch.location.china_admin_lookup import lookup_nearest_district
+from netwatch.location.admin.china_admin_lookup import lookup_nearest_district
 from netwatch.location.models import AdminLocationResult, BrowserLocationResult, PreciseLocationReport
-from netwatch.location.nearby_roads import (
+from netwatch.location.roads.nearby_roads import (
     RoadsDependencyError,
     find_nearby_roads,
     load_roads_dataset,
 )
-from netwatch.location.offline_boundary import (
+from netwatch.location.admin.offline_boundary import (
     BoundaryDependencyError,
     load_boundary_dataset,
     locate_admin_by_point,

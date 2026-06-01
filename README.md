@@ -191,7 +191,7 @@ LibreSpeed CLI 是外部二进制，不由 `requirements.txt` 管理。未安装
 
 ```bash
 python -m pip install -e ".[geo]"
-python scripts/download_guangzhou_boundary.py --force
+python scripts/geo/download_guangzhou_boundary.py --force
 export NETWATCH_BOUNDARY_GEOJSON="$HOME/.netwatch/geo/guangzhou_districts.geojson"
 export NETWATCH_BOUNDARY_COORD_SYSTEM=auto
 export NETWATCH_ROADS_GEOJSON=/path/to/real_roads.geojson
@@ -201,10 +201,13 @@ netwatch
 推荐只下载广州市区县级边界到 `~/.netwatch/geo/guangzhou_districts.geojson`：
 
 ```bash
-python scripts/download_guangzhou_boundary.py --force
-python scripts/download_guangzhou_boundary.py --probe-lat 23.1532 --probe-lon 113.5813
-python scripts/download_guangzhou_boundary.py --probe-lat 23.379859 --probe-lon 113.435329
+python scripts/geo/download_guangzhou_boundary.py --force
+python scripts/geo/download_guangzhou_boundary.py --probe-lat 23.1532 --probe-lon 113.5813
+python scripts/geo/download_guangzhou_boundary.py --probe-lat 23.379859 --probe-lon 113.435329
 ```
+
+旧路径 `scripts/download_guangzhou_boundary.py` 暂时保留为兼容 wrapper；新命令请优先使用 `scripts/geo/`。
+真实 DataV GeoJSON 只应保存在用户本机，例如 `~/.netwatch/geo/guangzhou_districts.geojson`，不要提交到仓库。
 
 两个手动验证样例：
 
@@ -226,9 +229,11 @@ DataV/Amap 边界数据的 GCJ-02 转换结果；如果两者命中不同区县�
 运行本地广州区县边界 stress test：
 
 ```bash
-python scripts/test_guangzhou_boundary_stress.py --boundary "$HOME/.netwatch/geo/guangzhou_districts.geojson"
-python scripts/test_guangzhou_boundary_stress.py --boundary "$HOME/.netwatch/geo/guangzhou_districts.geojson" --grid-regression
+python scripts/geo/test_guangzhou_boundary_stress.py --boundary "$HOME/.netwatch/geo/guangzhou_districts.geojson"
+python scripts/geo/test_guangzhou_boundary_stress.py --boundary "$HOME/.netwatch/geo/guangzhou_districts.geojson" --grid-regression
 ```
+
+旧路径 `scripts/test_guangzhou_boundary_stress.py` 暂时保留为兼容 wrapper。
 
 固定 regression 点来自 `tests/fixtures/location/guangzhou_probe_points.csv`：
 
@@ -239,6 +244,19 @@ stress test 还会比较 WGS84 与 GCJ-02 probe。区界附近结果可能受浏
 WGS84/GCJ-02 偏移和 DataV/高德边界数据版本影响；`boundary proximity warning` 不一定代表 bug，
 但需要在输出中解释。中心点最近邻只是 fallback，不能作为边界附近真值。
 
+## Project layout
+
+- `netwatch/location/admin`: 行政边界、区县中心点查询、坐标转换和边界 stress helpers。
+- `netwatch/location/roads`: 附近道路实验能力。
+- `scripts/geo`: 地理数据下载、验证和压力测试工具。
+- `tests/location`: location 子系统测试。
+- `tests/speedtest`: speedtest 子系统测试。
+- `tests/network`: scanner、router、proxy 和平台网络测试。
+
+TODO: speedtest 仍保留新 package 与旧兼容模块并存，包括 `netwatch/speedtest/`、
+`netwatch/speedtest_backends/`、`netwatch/speedtest_cn.py`、`netwatch/speedtest_cn_browser.py`、
+`netwatch/speedtest_runner.py` 和 `netwatch/speed.py`。后续应单独整理，避免本轮结构调整扩大风险。
+
 仓库只内置很小的 sample boundary/roads 数据用于测试和演示，不提交大型全国边界或 OSM 数据。
 正式 CLI 运行默认不会把 sample 当作真实定位结果；如需演示 sample，可显式设置
 `NETWATCH_USE_SAMPLE_GEO=1`，输出会标注 sample/demo。CLI 只显示“附近道路/街道”，不会声称是精确门牌地址。
@@ -246,7 +264,7 @@ WGS84/GCJ-02 偏移和 DataV/高德边界数据版本影响；`boundary proximit
 重建数据：
 
 ```bash
-python scripts/build_china_district_centers.py
+python scripts/geo/build_china_district_centers.py
 ```
 
 ## 测速说明
@@ -263,7 +281,7 @@ python scripts/build_china_district_centers.py
 
 ```bash
 source .venv/bin/activate
-python scripts/build_china_district_centers.py
+python scripts/geo/build_china_district_centers.py
 python -m compileall netwatch
 pytest -q
 git diff --check
@@ -286,7 +304,8 @@ netwatch-cli/
 │   ├── proxy_probe.py            当前公网出口检测
 │   ├── device_location.py        浏览器授权定位
 │   ├── location/                 定位与离线行政区划
-│   │   ├── china_admin_lookup.py
+│   │   ├── admin/                行政边界、中心点、坐标转换
+│   │   ├── roads/                附近道路实验能力
 │   │   └── data/                 轻量内置数据
 │   └── speedtest/                测速领域模块
 │       ├── analysis.py           测速结果一致性和路径分析
@@ -294,15 +313,19 @@ netwatch-cli/
 │       ├── speed.py              实时网卡流量采样
 │       ├── speedtest_cn*.py      speedtest.cn browser automation
 │       └── backends/             Ookla / LibreSpeed / Python 测速后端
-├── scripts/                      构建与维护脚本
-├── tests/                        单元测试和 mock 测试
+├── scripts/
+│   └── geo/                      地理数据下载、验证、压力测试脚本
+├── tests/
+│   ├── location/                 location 子系统测试
+│   ├── network/                  scanner/router/proxy/platform 测试
+│   └── speedtest/                speedtest 子系统测试
 └── docs/
     ├── handoff/                  给不同 AI agent 的交接文档
     ├── plans/                    版本规划与历史路线
     └── features/                 专项功能设计文档
 ```
 
-项目保持当前包布局，不迁移到 `src/`。测速相关业务模块已收敛到 `netwatch/speedtest/`，旧路径保留轻量兼容 wrapper。
+项目保持当前包布局，不迁移到 `src/`。测速相关目录仍有新旧兼容模块并存，后续单独整理。
 
 ## 数据与许可证
 

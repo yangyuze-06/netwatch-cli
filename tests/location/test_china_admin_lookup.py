@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from netwatch.location.china_admin_lookup import (
+from netwatch.location.admin.china_admin_lookup import (
     _haversine_km,
     _load_district_data,
     get_cache_info,
@@ -13,7 +13,7 @@ from netwatch.location.china_admin_lookup import (
 )
 
 
-DATA_PATH = Path(__file__).resolve().parent.parent / "netwatch/location/data/china_district_centers.csv"
+DATA_PATH = Path(__file__).resolve().parents[2] / "netwatch" / "location" / "data" / "china_district_centers.csv"
 
 
 # --- Haversine tests ---

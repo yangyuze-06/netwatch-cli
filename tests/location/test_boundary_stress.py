@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from netwatch.location.boundary_stress import (
+from netwatch.location.admin.boundary_stress import (
     generate_boundary_points,
     generate_epsilon_points_around,
     generate_representative_points,
@@ -18,10 +18,11 @@ from netwatch.location.boundary_stress import (
     run_boundary_stress,
     run_known_point_probes,
 )
-from netwatch.location.boundary_tools import validate_boundary_geojson
-from netwatch.location.offline_boundary import DEFAULT_BOUNDARY_GEOJSON, load_boundary_dataset, locate_admin_by_point
+from netwatch.location.admin.boundary_tools import validate_boundary_geojson
+from netwatch.location.admin.offline_boundary import DEFAULT_BOUNDARY_GEOJSON, load_boundary_dataset, locate_admin_by_point
 
-FIXTURE_DIR = Path("tests/fixtures/location")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "location"
 
 try:
     import shapely  # noqa: F401
@@ -157,7 +158,7 @@ def test_stress_script_refuses_whole_only_boundary() -> None:
     completed = subprocess.run(
         [
             sys.executable,
-            "scripts/test_guangzhou_boundary_stress.py",
+            "scripts/geo/test_guangzhou_boundary_stress.py",
             "--boundary",
             str(FIXTURE_DIR / "guangzhou_whole_only.geojson"),
         ],

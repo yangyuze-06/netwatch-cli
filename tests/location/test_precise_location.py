@@ -10,7 +10,7 @@ from rich.console import Console
 
 from netwatch.device_location import DeviceLocationResult
 from netwatch.location.models import AdminLocationResult, BrowserLocationResult, PreciseLocationReport
-from netwatch.location.offline_boundary import (
+from netwatch.location.admin.offline_boundary import (
     BoundaryDependencyError,
     DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON,
     DEFAULT_BOUNDARY_GEOJSON,
@@ -18,7 +18,7 @@ from netwatch.location.offline_boundary import (
     load_boundary_dataset,
     locate_admin_by_point,
 )
-from netwatch.location.nearby_roads import (
+from netwatch.location.roads.nearby_roads import (
     DEFAULT_ROADS_GEOJSON,
     RoadsDependencyError,
     find_nearby_roads,
@@ -127,7 +127,7 @@ def test_precise_report_without_config_does_not_use_sample_boundary(monkeypatch)
     monkeypatch.delenv("NETWATCH_ROADS_GEOJSON", raising=False)
     monkeypatch.delenv("NETWATCH_USE_SAMPLE_GEO", raising=False)
     monkeypatch.setattr(
-        "netwatch.location.offline_boundary.DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON",
+        "netwatch.location.admin.offline_boundary.DEFAULT_GUANGZHOU_BOUNDARY_GEOJSON",
         Path("/tmp/netwatch-test-missing-guangzhou-boundary.geojson"),
     )
     device = DeviceLocationResult(latitude=23.153126, longitude=113.581404, accuracy_m=30.0)

@@ -19,11 +19,11 @@ For the current Guangzhou-only workflow, download only Guangzhou district
 boundaries:
 
 ```bash
-python scripts/download_guangzhou_boundary.py --force
+python scripts/geo/download_guangzhou_boundary.py --force
 export NETWATCH_BOUNDARY_GEOJSON="$HOME/.netwatch/geo/guangzhou_districts.geojson"
 export NETWATCH_BOUNDARY_COORD_SYSTEM=auto
-python scripts/download_guangzhou_boundary.py --probe-lat 23.1532 --probe-lon 113.5813
-python scripts/download_guangzhou_boundary.py --probe-lat 23.379859 --probe-lon 113.435329
+python scripts/geo/download_guangzhou_boundary.py --probe-lat 23.1532 --probe-lon 113.5813
+python scripts/geo/download_guangzhou_boundary.py --probe-lat 23.379859 --probe-lon 113.435329
 ```
 
 Expected manual probe samples:

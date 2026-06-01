@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAW_PATH = PROJECT_ROOT / "netwatch/location/data/raw/ok_data_level3.csv"
 OUT_PATH = PROJECT_ROOT / "netwatch/location/data/china_district_centers.csv"
 GEOCSV_ENV = "NETWATCH_CHINA_GEO_CSV"

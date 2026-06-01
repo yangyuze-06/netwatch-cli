@@ -194,7 +194,7 @@ def _is_likely_china(result: DeviceLocationResult) -> bool:
 def _fill_china_district(result: DeviceLocationResult) -> None:
     """Attempt to find the nearest Chinese district center for these coordinates."""
     try:
-        from netwatch.location.china_admin_lookup import lookup_nearest_district
+        from netwatch.location.admin.china_admin_lookup import lookup_nearest_district
     except ImportError:
         return
 

@@ -7,7 +7,7 @@
 ## Algorithm
 
 - `china_district_centers.csv` 内置区县级中心点。
-- `netwatch.location.china_admin_lookup` 使用 Haversine 距离计算最近区县中心点。
+- `netwatch.location.admin.china_admin_lookup` 使用 Haversine 距离计算最近区县中心点。
 - 当前算法是“区县中心点最近邻”，不是真实行政边界或 polygon containment。
 - `boundaries/china_districts.sample.geojson` 是极小边界样例，仅用于测试和显式 demo。
 - `roads/roads.sample.geojson` 是极小道路样例，仅用于测试和显式 demo。
@@ -61,11 +61,11 @@ pip install -e ".[geo]"
 ## Rebuild
 
 ```bash
-python scripts/build_china_district_centers.py
+python scripts/geo/build_china_district_centers.py
 ```
 
 如果需要使用本地已解压的 `ok_geo.csv`：
 
 ```bash
-NETWATCH_CHINA_GEO_CSV=/path/to/ok_geo.csv python scripts/build_china_district_centers.py
+NETWATCH_CHINA_GEO_CSV=/path/to/ok_geo.csv python scripts/geo/build_china_district_centers.py
 ```

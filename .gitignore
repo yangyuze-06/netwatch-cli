@@ -1,4 +1,6 @@
 .venv/
+.venv*/
+.env
 venv/
 env/
 __pycache__/
@@ -12,6 +14,8 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+.netwatch/
+*.log
 netwatch/.venv/
 netwatch/**/__pycache__/
 netwatch/location/data/raw/ok_geo.csv
