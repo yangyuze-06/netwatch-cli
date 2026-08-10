@@ -30,7 +30,7 @@
 ### 安装（macOS / Linux）
 
 ```bash
-git clone https://github.com/yangyuze-06/netwatch-cli.git
+git clone https://github.com/L1ngSh1/netwatch-cli.git
 cd netwatch-cli
 python3 -m venv .venv
 source .venv/bin/activate
